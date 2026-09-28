@@ -1,0 +1,199 @@
+const express = require('express');
+const { v4: uuidv4 } = require('uuid');
+const pool = require('../db/pool');
+const { authRequired } = require('../middleware/auth');
+const { nextNumber, peekNumber } = require('../db/ticketNumber');
+const { router: attachmentsRouter, attachmentsFor, removeFile } = require('./attachments');
+
+const router = express.Router();
+
+// Board columns, in order. "Filed Ticket List for Host" is only relevant
+// for Android and iOS platforms - the frontend hides it for Web.
+const STATUSES = [
+  'On Filing',
+  'Filed Ticket List',
+  'Filed Ticket List for Host',
+  'Working in Progress by Dev',
+  'Complete (For Retest)',
+  'Reactive',
+  'Backend Issue',
+  'Closed'
+];
+
+router.use('/:id/attachments', attachmentsRouter);
+
+router.get('/statuses', (req, res) => res.json(STATUSES));
+
+// List devs, used to populate the Assignee dropdown on a card.
+// Pass ?platform=Android|iOS|Web to only get devs on that platform team.
+router.get('/devs', authRequired, async (req, res) => {
+  try {
+    let sql = "SELECT id, name, platform FROM users WHERE role = 'Dev'";
+    const params = [];
+    if (req.query.platform) {
+      sql += ' AND platform = ?';
+      params.push(req.query.platform);
+    }
+    const [rows] = await pool.execute(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error loading developers' });
+  }
+});
+
+// Preview of the ticket number the next filed ticket will get (form shows it)
+router.get('/next-number', authRequired, async (req, res) => {
+  try {
+    if (!['Android', 'iOS', 'Web'].includes(req.query.platform)) {
+      return res.status(400).json({ error: 'Invalid platform' });
+    }
+    res.json({ ticket_number: await peekNumber(req.query.platform) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Public, no-auth view for the shareable ticket link
+router.get('/share/:token', async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM tickets WHERE share_token = ?', [req.params.token]);
+    if (!rows[0]) return res.status(404).json({ error: 'Ticket not found' });
+    rows[0].attachments = (await attachmentsFor([rows[0].id]))[rows[0].id];
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error loading ticket' });
+  }
+});
+
+router.get('/', authRequired, async (req, res) => {
+  try {
+    let sql = 'SELECT * FROM tickets';
+    const params = [];
+    if (req.query.platform) {
+      sql += ' WHERE platform = ?';
+      params.push(req.query.platform);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const [rows] = await pool.execute(sql, params);
+    const atts = await attachmentsFor(rows.map(r => r.id));
+    rows.forEach(r => { r.attachments = atts[r.id]; });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error loading tickets' });
+  }
+});
+
+router.get('/:id', authRequired, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Ticket not found' });
+    rows[0].attachments = (await attachmentsFor([rows[0].id]))[rows[0].id];
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error loading ticket' });
+  }
+});
+
+// File a new ticket. Only QA accounts may file - "filed by" is taken
+// automatically from the logged-in QA member, never typed manually.
+router.post('/', authRequired, async (req, res) => {
+  try {
+    if (req.user.role !== 'QA') {
+      return res.status(403).json({ error: 'Only QA members can file new tickets' });
+    }
+    const { title, description, platform, priority, severity, assignee_id } = req.body;
+    if (!title || !platform) return res.status(400).json({ error: 'Title and platform are required' });
+    if (!['Android', 'iOS', 'Web'].includes(platform)) {
+      return res.status(400).json({ error: 'Platform must be Android, iOS, or Web' });
+    }
+    const id = uuidv4();
+    const shareToken = uuidv4();
+    const ticketNumber = await nextNumber(platform);
+    await pool.execute(
+      `INSERT INTO tickets
+        (id, ticket_number, title, description, platform, status, priority, severity, assignee_id, filed_by_id, filed_by_name, share_token)
+       VALUES (?, ?, ?, ?, ?, 'On Filing', ?, ?, ?, ?, ?, ?)`,
+      [
+        id, ticketNumber, title, description || '', platform,
+        priority || 'Medium', severity || 'Minor', assignee_id || null,
+        req.user.id, req.user.name, shareToken
+      ]
+    );
+    const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [id]);
+    rows[0].attachments = [];
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error filing ticket' });
+  }
+});
+
+// Edit ticket fields (title, description, priority, severity, assignee)
+router.put('/:id', authRequired, async (req, res) => {
+  try {
+    const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
+    const t = existing[0];
+    const { title, description, priority, severity, assignee_id } = req.body;
+    await pool.execute(
+      `UPDATE tickets SET title = ?, description = ?, priority = ?, severity = ?, assignee_id = ? WHERE id = ?`,
+      [
+        title !== undefined ? title : t.title,
+        description !== undefined ? description : t.description,
+        priority !== undefined ? priority : t.priority,
+        severity !== undefined ? severity : t.severity,
+        assignee_id !== undefined ? (assignee_id || null) : t.assignee_id,
+        req.params.id
+      ]
+    );
+    const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error updating ticket' });
+  }
+});
+
+// Move a card between board columns (drag & drop uses this)
+router.put('/:id/status', authRequired, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
+    const t = existing[0];
+
+    const setFixedAt = status === 'Complete (For Retest)' && !t.fixed_at;
+    const closedAtClause = status === 'Closed' ? 'NOW()' : 'NULL';
+
+    await pool.execute(
+      `UPDATE tickets SET status = ?, fixed_at = ${setFixedAt ? 'NOW()' : 'fixed_at'}, closed_at = ${closedAtClause} WHERE id = ?`,
+      [status, req.params.id]
+    );
+    const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error moving ticket' });
+  }
+});
+
+router.delete('/:id', authRequired, async (req, res) => {
+  try {
+    const files = (await attachmentsFor([req.params.id]))[req.params.id] || [];
+    const [result] = await pool.execute('DELETE FROM tickets WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Ticket not found' });
+    files.forEach(removeFile);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error deleting ticket' });
+  }
+});
+
+module.exports = router;
