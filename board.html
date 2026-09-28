@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bug Tracker Board</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>🐞 Bug Tracker</h1>
+  <div class="platform-tabs" id="platformTabs">
+    <button data-platform="Android" class="active">Android</button>
+    <button data-platform="iOS">iOS</button>
+    <button data-platform="Web">Web</button>
+  </div>
+  <div class="top-actions">
+    <span class="who" id="whoAmI"></span>
+    <button id="exportBtn">Export CSV</button>
+    <button class="cta" id="newTicketBtn">+ File Ticket</button>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+</header>
+
+<div class="stats-bar" id="statsBar"></div>
+
+<div class="board" id="board"></div>
+
+<button class="fab" id="fabAdd" title="File a new ticket">+</button>
+
+<!-- Ticket create/edit modal -->
+<div class="overlay" id="ticketOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">File New Ticket</h2>
+    <form id="ticketForm">
+      <div class="form-group">
+        <label>Ticket No.</label>
+        <input type="text" id="tNumber" disabled>
+      </div>
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="tTitle" required>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="tDescription" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Attachments</label>
+        <div class="attach-actions">
+          <button type="button" class="btn-attach" id="addLinkBtn">🔗 Link</button>
+          <button type="button" class="btn-attach" id="addImageBtn">🖼 Image</button>
+          <button type="button" class="btn-attach" id="addVideoBtn">🎥 Video</button>
+        </div>
+        <input type="file" id="imageInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+        <input type="file" id="videoInput" accept="video/mp4,video/webm,video/quicktime,video/ogg" multiple hidden>
+        <div class="link-row" id="linkRow" style="display:none;">
+          <input type="url" id="linkInput" placeholder="https://example.com/...">
+          <button type="button" class="btn-attach" id="linkAddBtn">Add</button>
+        </div>
+        <div class="attach-list" id="attachList"></div>
+        <div class="attach-status" id="attachStatus"></div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label>Priority</label>
+          <select id="tPriority">
+            <option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Severity</label>
+          <select id="tSeverity">
+            <option selected>Minor</option><option>Major</option><option>Critical</option><option>Blocker</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Assignee (Dev)</label>
+        <select id="tAssignee"><option value="">Unassigned</option></select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="tStatus"></select>
+      </div>
+      <div class="form-group" id="filedByWrap" style="display:none;">
+        <label>Filed By</label>
+        <input type="text" id="tFiledBy" disabled>
+      </div>
+      <div class="form-group" id="shareWrap" style="display:none;">
+        <label>Shareable Link</label>
+        <input type="text" id="tShareLink" readonly>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-danger" id="deleteBtn" style="display:none;">Delete</button>
+        <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn-save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/board.js"></script>
+</body>
+</html>

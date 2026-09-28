@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared Ticket - Bug Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-wrap" style="max-width:620px;">
+    <h1>🐞 Shared Ticket</h1>
+    <div id="content">Loading...</div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const content = document.getElementById('content');
+
+    async function load() {
+      if (!token) { content.textContent = 'No ticket token provided.'; return; }
+      try {
+        const res = await fetch(`/api/tickets/share/${token}`);
+        const t = await res.json();
+        if (!res.ok) { content.textContent = t.error || 'Ticket not found.'; return; }
+        content.innerHTML = `
+          <div class="tno">${escapeHtml(t.ticket_number || '')}</div>
+          <h2 style="margin-top:0;">${escapeHtml(t.title)}</h2>
+          <div class="badges" style="margin-bottom:12px;">
+            <span class="badge prio-${t.priority}">${t.priority}</span>
+            <span class="badge sev-${t.severity}">${t.severity}</span>
+          </div>
+          <p><strong>Platform:</strong> ${t.platform}</p>
+          <p><strong>Status:</strong> ${t.status}</p>
+          <p><strong>Filed by:</strong> ${escapeHtml(t.filed_by_name || '')}</p>
+          <p><strong>Description:</strong></p>
+          <div class="share-desc">${escapeHtml(t.description || 'No description provided.')}</div>
+          ${attachmentsHtml(t.attachments)}
+          <p style="color:#93a4b8;font-size:12px;">Created: ${new Date(t.created_at).toLocaleString()}</p>
+        `;
+      } catch (e) {
+        content.textContent = 'Could not load ticket.';
+      }
+    }
+    function attachmentsHtml(list) {
+      if (!list || !list.length) return '';
+      const items = list.map(a => {
+        if (a.type === 'image') return `<div class="attach-item"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name)}"></a></div>`;
+        if (a.type === 'video') return `<div class="attach-item"><video src="${escapeHtml(a.url)}" controls preload="metadata"></video></div>`;
+        let safe = false;
+        try { safe = ['http:', 'https:'].includes(new URL(a.url).protocol); } catch (e) {}
+        return `<div class="attach-item"><a class="link" ${safe ? `href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"` : ''}>🔗 ${escapeHtml(a.name || a.url)}</a></div>`;
+      }).join('');
+      return `<p><strong>Attachments:</strong></p><div class="attach-list">${items}</div>`;
+    }
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+    load();
+  </script>
+</body>
+</html>
