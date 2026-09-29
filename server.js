@@ -10,7 +10,7 @@ const adminRoutes = require('./routes/admin');
 const { migrate } = require('./db/migrate');
 
 const app = express();
-app.use(cors({ origin: 'https://bug-tracker-wheat-ten.vercel.app' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
