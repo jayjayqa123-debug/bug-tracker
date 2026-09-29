@@ -1,9 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, qaRequired } = require('../middleware/auth');
 const { nextNumber, peekNumber } = require('../db/ticketNumber');
 const { router: attachmentsRouter, attachmentsFor, removeFile } = require('./attachments');
+const commentsRouter = require('./comments');
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ const STATUSES = [
 ];
 
 router.use('/:id/attachments', attachmentsRouter);
+router.use('/:id/comments', commentsRouter);
 
 router.get('/statuses', (req, res) => res.json(STATUSES));
 
@@ -70,7 +72,7 @@ router.get('/share/:token', async (req, res) => {
 
 router.get('/', authRequired, async (req, res) => {
   try {
-    let sql = 'SELECT * FROM tickets';
+    let sql = 'SELECT tickets.*, (SELECT COUNT(*) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS comment_count FROM tickets';
     const params = [];
     if (req.query.platform) {
       sql += ' WHERE platform = ?';
@@ -133,8 +135,9 @@ router.post('/', authRequired, async (req, res) => {
   }
 });
 
-// Edit ticket fields (title, description, priority, severity, assignee)
-router.put('/:id', authRequired, async (req, res) => {
+// Edit ticket fields (title, description, priority, severity, assignee).
+// QA only - developers can move the status and comment, but not edit the ticket.
+router.put('/:id', authRequired, qaRequired, async (req, res) => {
   try {
     const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
@@ -183,7 +186,7 @@ router.put('/:id/status', authRequired, async (req, res) => {
   }
 });
 
-router.delete('/:id', authRequired, async (req, res) => {
+router.delete('/:id', authRequired, qaRequired, async (req, res) => {
   try {
     const files = (await attachmentsFor([req.params.id]))[req.params.id] || [];
     const [result] = await pool.execute('DELETE FROM tickets WHERE id = ?', [req.params.id]);

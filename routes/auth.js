@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const google = require('../services/google');
-const { SECRET } = require('../middleware/auth');
+const { SECRET, authRequired, isAdminUser } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -23,10 +23,15 @@ function checkProfile(role, platform) {
 }
 
 function session(user) {
-  const publicUser = { id: user.id, name: user.name, email: user.email, role: user.role, platform: user.platform };
-  const token = jwt.sign(publicUser, SECRET, { expiresIn: '7d' });
-  return { token, user: publicUser };
+  const base = { id: user.id, name: user.name, email: user.email, role: user.role, platform: user.platform };
+  const token = jwt.sign(base, SECRET, { expiresIn: '7d' });
+  return {
+    token,
+    user: { ...base, isAdmin: isAdminUser(user), mustChangePassword: !!user.must_change_password }
+  };
 }
+
+const MIN_PASSWORD = 6;
 
 // Tells the login page whether to show the Google button
 router.get('/config', (req, res) => {
@@ -74,6 +79,60 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error while logging in' });
+  }
+});
+
+// Forgot password: there is no email service, so this flags the account and the
+// QA Admin sees the request on the Admin page and hands out a temporary password.
+// The reply is identical whether or not the email exists (no account enumeration).
+router.post('/forgot', async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim();
+    if (!email) return res.status(400).json({ error: 'Please enter your email' });
+    await pool.execute('UPDATE users SET reset_requested_at = NOW() WHERE email = ? AND password IS NOT NULL', [email]);
+    res.json({ message: 'Request sent. If that email is registered, the QA Admin will give you a temporary password.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error while sending the request' });
+  }
+});
+
+// Change your own password (also used to replace an admin-issued temporary one)
+router.post('/change-password', authRequired, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password are required' });
+    if (String(newPassword).length < MIN_PASSWORD) {
+      return res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD} characters` });
+    }
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    const user = rows[0];
+    if (!user || !user.password) return res.status(400).json({ error: 'This account has no password to change' });
+    if (!(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.execute(
+      'UPDATE users SET password = ?, must_change_password = 0, reset_requested_at = NULL WHERE id = ?',
+      [hash, user.id]
+    );
+    user.must_change_password = 0;
+    res.json(session(user));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error while changing password' });
+  }
+});
+
+// Fresh copy of the logged-in user (role, admin flag, must-change flag)
+router.get('/me', authRequired, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!rows[0]) return res.status(401).json({ error: 'Account no longer exists' });
+    res.json(session(rows[0]).user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

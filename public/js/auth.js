@@ -3,8 +3,16 @@ const tabRegister = document.getElementById('tabRegister');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 
-// If already logged in, go straight to the board
-if (localStorage.getItem('token')) {
+const forgotForm = document.getElementById('forgotForm');
+const changeForm = document.getElementById('changeForm');
+const tabsEl = document.querySelector('.tabs');
+
+let storedUser = null;
+try { storedUser = JSON.parse(localStorage.getItem('user') || 'null'); } catch (e) {}
+const mustChange = !!(storedUser && storedUser.mustChangePassword);
+
+// If already logged in, go straight to the board (unless a password change is required)
+if (localStorage.getItem('token') && !mustChange) {
   window.location.href = 'board.html';
 }
 
@@ -16,6 +24,62 @@ tabRegister.onclick = () => {
   tabRegister.classList.add('active'); tabLogin.classList.remove('active');
   registerForm.style.display = 'block'; loginForm.style.display = 'none';
 };
+
+// ---------------- Forgot password / forced password change ----------------
+function showOnly(form) {
+  [loginForm, registerForm, forgotForm, changeForm].forEach(f => { f.style.display = f === form ? 'block' : 'none'; });
+  tabsEl.style.display = (form === loginForm || form === registerForm) ? 'flex' : 'none';
+  document.getElementById('googleArea').style.display = (form === loginForm && window.__googleReady) ? 'block' : 'none';
+}
+document.getElementById('forgotLink').onclick = (e) => { e.preventDefault(); showOnly(forgotForm); };
+document.getElementById('forgotBack').onclick = (e) => { e.preventDefault(); showOnly(loginForm); tabLogin.click(); };
+
+forgotForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('forgotMsg');
+  msg.textContent = ''; msg.className = 'msg';
+  try {
+    const res = await fetch('/api/auth/forgot', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: document.getElementById('forgotEmail').value })
+    });
+    const data = await res.json();
+    msg.textContent = data.message || data.error;
+    msg.className = 'msg ' + (res.ok ? 'ok' : 'err');
+  } catch (err) {
+    msg.textContent = 'Could not reach the server.'; msg.className = 'msg err';
+  }
+};
+
+changeForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('changeMsg');
+  msg.textContent = ''; msg.className = 'msg';
+  const newPassword = document.getElementById('chgNew').value;
+  if (newPassword !== document.getElementById('chgConfirm').value) {
+    msg.textContent = 'The new passwords do not match.'; msg.className = 'msg err'; return;
+  }
+  try {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') },
+      body: JSON.stringify({ currentPassword: document.getElementById('chgCurrent').value, newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) { msg.textContent = data.error; msg.className = 'msg err'; return; }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    window.location.href = 'board.html';
+  } catch (err) {
+    msg.textContent = 'Could not reach the server.'; msg.className = 'msg err';
+  }
+};
+document.getElementById('chgSignOut').onclick = (e) => {
+  e.preventDefault();
+  localStorage.removeItem('token'); localStorage.removeItem('user');
+  window.location.reload();
+};
+if (localStorage.getItem('token') && mustChange) showOnly(changeForm);
 
 const regRole = document.getElementById('regRole');
 const regPlatformWrap = document.getElementById('regPlatformWrap');
@@ -40,6 +104,11 @@ loginForm.onsubmit = async (e) => {
     if (!res.ok) { msg.textContent = data.error; msg.className = 'msg err'; return; }
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.user.mustChangePassword) {
+      document.getElementById('chgCurrent').value = password;
+      showOnly(changeForm);
+      return;
+    }
     window.location.href = 'board.html';
   } catch (err) {
     msg.textContent = 'Could not reach the server.'; msg.className = 'msg err';
@@ -145,7 +214,8 @@ googleCompleteForm.onsubmit = async (e) => {
       google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: onGoogleCredential });
       google.accounts.id.renderButton(document.getElementById('googleBtn'),
         { theme: 'filled_black', size: 'large', text: 'continue_with', width: 340 });
-      googleArea.style.display = 'block';
+      window.__googleReady = true;
+      if (loginForm.style.display !== 'none') googleArea.style.display = 'block';
     };
     document.head.appendChild(script);
   } catch (e) { /* manual sign-in still works */ }

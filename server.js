@@ -6,10 +6,11 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
 const exportRoutes = require('./routes/export');
+const adminRoutes = require('./routes/admin');
 const { migrate } = require('./db/migrate');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: 'https://bug-tracker-wheat-ten.vercel.app' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -17,6 +18,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => res.redirect('/index.html'));
 
