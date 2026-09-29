@@ -21,15 +21,19 @@ app.use('/api/export', exportRoutes);
 app.get('/', (req, res) => res.redirect('/index.html'));
 
 const PORT = process.env.PORT || 3000;
-// Create/upgrade database tables first, then start listening
+
+// Create/upgrade database tables first, then start the server
 migrate()
   .then(() => {
+    console.log('Database migration completed');
+
     app.listen(PORT, () => {
-      console.log(`Bug Tracker running at http://localhost:${PORT}`);
+      console.log(`Server running at http://localhost:${PORT}`);
     });
   })
   .catch(err => {
-    console.error('\nCould not set up the database: ' + err.message);
-    console.error('Check DB_HOST / DB_NAME / DB_USER / DB_PASSWORD in your .env file and that MySQL is running.\n');
+    console.error('Could not set up the database:', err.message);
     process.exit(1);
   });
+
+module.exports = app;

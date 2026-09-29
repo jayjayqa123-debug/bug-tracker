@@ -1,5 +1,8 @@
 // MySQL connection pool, configured from environment variables.
 // On cPanel, these match the database you create in "MySQL Databases".
+// MySQL connection pool, configured from environment variables.
+// On CI, please match the database you create in "MySQL Databases".
+
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 
@@ -9,6 +12,11 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+
+  ssl: {
+    rejectUnauthorized: true
+  },
+
   waitForConnections: true,
   connectionLimit: 10,
   dateStrings: true

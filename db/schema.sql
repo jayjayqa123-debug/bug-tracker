@@ -43,7 +43,7 @@ CREATE TABLE `attachments` (
 --
 
 CREATE TABLE `bugs` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `project_id` int(11) NOT NULL,
   `title` varchar(500) NOT NULL,
   `description` text DEFAULT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE `bugs` (
 --
 
 CREATE TABLE `bug_attachments` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `bug_id` int(11) NOT NULL,
   `file_name` varchar(255) NOT NULL,
   `file_path` varchar(500) NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE `bug_attachments` (
 --
 
 CREATE TABLE `bug_history` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `bug_id` int(11) NOT NULL,
   `action` enum('opened','resolved','closed','activated','assigned','commented') DEFAULT NULL,
   `comment` text DEFAULT NULL,
@@ -125,7 +125,7 @@ INSERT INTO `counters` (`platform`, `last_number`) VALUES
 --
 
 CREATE TABLE `projects` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `code` varchar(50) NOT NULL,
   `type` enum('project','product') DEFAULT 'project',
@@ -271,34 +271,7 @@ ALTER TABLE `users`
 
 --
 -- AUTO_INCREMENT for table `bugs`
---
-ALTER TABLE `bugs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
---
--- AUTO_INCREMENT for table `bug_attachments`
---
-ALTER TABLE `bug_attachments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `bug_history`
---
-ALTER TABLE `bug_history`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `projects`
---
-ALTER TABLE `projects`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- Constraints for dumped tables
---
-
---
--- Constraints for table `attachments`
 --
 ALTER TABLE `attachments`
   ADD CONSTRAINT `attachments_ibfk_1` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE CASCADE;
