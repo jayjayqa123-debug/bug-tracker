@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Bug Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>🛡 QA Admin</h1>
+  <div class="top-actions">
+    <span class="who" id="whoAmI"></span>
+    <button id="backBtn">← Back to Board</button>
+  </div>
+</header>
+
+<div class="admin-wrap">
+  <h2 style="margin:0 0 4px;">User accounts</h2>
+  <p style="color:var(--muted);font-size:13px;margin:0;">
+    Passwords are stored encrypted (one-way) and can't be viewed by anyone. If someone forgets theirs,
+    click <strong>Reset password</strong> to issue a temporary one. They must choose a new password when they sign in.
+  </p>
+
+  <div class="admin-tools">
+    <input type="text" id="search" placeholder="Search name or email…">
+    <select id="roleFilter">
+      <option value="">All roles</option>
+      <option value="QA">QA</option>
+      <option value="Dev">Dev</option>
+    </select>
+  </div>
+  <div id="summary" style="font-size:12px;color:var(--muted);margin-bottom:8px;"></div>
+
+  <div class="table-scroll">
+    <table class="users">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Platform</th><th>Sign-in</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+      <tbody id="userRows"><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Temporary password dialog -->
+<div class="overlay" id="pwOverlay">
+  <div class="modal" style="max-width:420px;">
+    <h2>Temporary password</h2>
+    <p style="font-size:13px;color:var(--muted);margin-top:0;" id="pwFor"></p>
+    <div class="temp-pw" id="pwValue"></div>
+    <p style="font-size:12px;color:var(--medium);">This is shown only once. Share it with the user privately; they'll be asked to set a new password at their next sign-in.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" id="pwCopy">Copy</button>
+      <button type="button" class="btn-save" id="pwClose">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/admin.js"></script>
+</body>
+</html>

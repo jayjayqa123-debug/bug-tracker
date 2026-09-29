@@ -22,6 +22,24 @@ let editingId = null;
 let currentAttachments = []; // saved attachments of the ticket being edited
 let pendingAttachments = []; // attachments queued while filing a new ticket
 
+// Refresh role/admin info from the server (picks up admin access and forced password changes)
+(async function refreshMe() {
+  try {
+    const res = await fetch('/api/auth/me', { headers: authHeaders });
+    if (res.status === 401) {
+      localStorage.removeItem('token'); localStorage.removeItem('user');
+      window.location.href = 'index.html'; return;
+    }
+    if (!res.ok) return;
+    const fresh = await res.json();
+    localStorage.setItem('user', JSON.stringify(fresh));
+    if (fresh.mustChangePassword) { window.location.href = 'index.html'; return; }
+    if (fresh.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+  } catch (e) {}
+})();
+if (user && user.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
+
 document.getElementById('whoAmI').textContent = `${user.name} (${user.role})`;
 if (user.role !== 'QA') document.getElementById('newTicketBtn').style.display = 'none';
 document.getElementById('fabAdd').style.display = user.role === 'QA' ? 'block' : 'none';
@@ -50,7 +68,7 @@ async function loadDevs() {
   const res = await fetch(`/api/tickets/devs?platform=${currentPlatform}`, { headers: authHeaders });
   devs = await res.json();
   const sel = document.getElementById('tAssignee');
-  sel.innerHTML = '<option value="">Unassigned</option>' + devs.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  sel.innerHTML = '<option value="">Unassigned</option>' + devs.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
 }
 
 async function loadStats() {
@@ -100,7 +118,7 @@ function renderBoard() {
 
 function assigneeName(id) {
   const d = devs.find(x => x.id === id);
-  return d ? d.name : 'Unassigned';
+  return d ? escapeHtml(d.name) : 'Unassigned';
 }
 
 function renderCard(t) {
@@ -116,7 +134,7 @@ function renderCard(t) {
       <span class="badge sev-${t.severity}">${t.severity}</span>
     </div>
     <div class="meta">
-      <span>👤 ${assigneeName(t.assignee_id)}${(t.attachments && t.attachments.length) ? ` · 📎 ${t.attachments.length}` : ''}</span>
+      <span>👤 ${assigneeName(t.assignee_id)}${(t.attachments && t.attachments.length) ? ` · 📎 ${t.attachments.length}` : ''}${Number(t.comment_count) ? ` · 💬 ${t.comment_count}` : ''}</span>
       <button class="share-btn" data-token="${t.share_token}">🔗 Share</button>
     </div>
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
@@ -178,6 +196,7 @@ function openModal(ticket) {
     shareWrap.style.display = 'none';
     deleteBtn.style.display = 'none';
   }
+  applyRoleRestrictions(ticket);
   currentAttachments = ticket ? (ticket.attachments || (ticket.attachments = [])) : [];
   pendingAttachments = [];
   document.getElementById('linkRow').style.display = 'none';
@@ -187,7 +206,25 @@ function openModal(ticket) {
   autoGrow(); // must run after the modal is visible so scrollHeight is correct
 }
 
+// Developers can read a ticket, change its status and comment - but not edit it.
+const EDIT_FIELDS = ['tTitle', 'tDescription', 'tPriority', 'tSeverity', 'tAssignee'];
+function applyRoleRestrictions(ticket) {
+  const isQA = user.role === 'QA';
+  EDIT_FIELDS.forEach(id => { document.getElementById(id).disabled = !isQA; });
+  document.querySelector('.attach-actions').style.display = isQA ? 'flex' : 'none';
+  document.getElementById('modalTitle').textContent =
+    !ticket ? 'File New Ticket' : (isQA ? 'Ticket Details' : 'Ticket Details (read-only)');
+  form.querySelector('.btn-save').textContent = isQA ? 'Save' : 'Update Status';
+  // Comments only make sense on a saved ticket
+  document.getElementById('commentsWrap').style.display = ticket ? 'block' : 'none';
+  document.getElementById('commentList').innerHTML = '';
+  document.getElementById('commentInput').value = '';
+  stopCommentPolling();
+  if (ticket) { loadComments(ticket.id); startCommentPolling(ticket.id); }
+}
+
 function closeModal() {
+  stopCommentPolling();
   overlay.classList.remove('open'); editingId = null; form.reset();
   pendingAttachments.forEach(p => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
   pendingAttachments = []; currentAttachments = [];
@@ -218,7 +255,10 @@ form.onsubmit = async (e) => {
   saveBtn.disabled = true;
   try {
     if (editingId) {
-      await fetch(`/api/tickets/${editingId}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(payload) });
+      if (user.role === 'QA') {
+        const r = await fetch(`/api/tickets/${editingId}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(payload) });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save the ticket'); return; }
+      }
       const newStatus = document.getElementById('tStatus').value;
       await fetch(`/api/tickets/${editingId}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status: newStatus }) });
     } else {
@@ -319,10 +359,12 @@ function attachItemEl(a, onRemove, pending) {
     const t = document.createElement('div'); t.className = 'pending-tag';
     t.textContent = 'Will upload when you save'; el.appendChild(t);
   }
-  const rm = document.createElement('button');
-  rm.type = 'button'; rm.className = 'rm'; rm.title = 'Remove'; rm.textContent = '✕';
-  rm.onclick = onRemove;
-  el.appendChild(rm);
+  if (user.role === 'QA') {
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'rm'; rm.title = 'Remove'; rm.textContent = '✕';
+    rm.onclick = onRemove;
+    el.appendChild(rm);
+  }
   return el;
 }
 
@@ -396,6 +438,88 @@ async function addLink() {
 }
 document.getElementById('linkAddBtn').onclick = addLink;
 linkInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } });
+
+// ---------- Comments (QA <-> Dev) ----------
+const commentList = document.getElementById('commentList');
+const commentInput = document.getElementById('commentInput');
+let commentTimer = null;
+
+function stopCommentPolling() { if (commentTimer) { clearInterval(commentTimer); commentTimer = null; } }
+function startCommentPolling(ticketId) {
+  commentTimer = setInterval(() => { if (editingId === ticketId) loadComments(ticketId, true); }, 15000);
+}
+
+function renderComments(list) {
+  const nearBottom = commentList.scrollHeight - commentList.scrollTop - commentList.clientHeight < 40;
+  commentList.innerHTML = '';
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'comment-empty'; empty.textContent = 'No comments yet. Start the conversation below.';
+    commentList.appendChild(empty); return;
+  }
+  list.forEach(c => {
+    const mine = c.user_id === user.id;
+    const el = document.createElement('div');
+    el.className = 'comment' + (mine ? ' mine' : '');
+    const head = document.createElement('div');
+    head.className = 'comment-head';
+    const who = document.createElement('strong'); who.textContent = c.user_name;
+    const role = document.createElement('span');
+    role.className = 'role-tag role-' + c.user_role; role.textContent = c.user_role;
+    const when = document.createElement('span');
+    when.className = 'comment-time'; when.textContent = new Date(c.created_at.replace(' ', 'T')).toLocaleString();
+    head.append(who, role, when);
+    if (mine) {
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'comment-del'; del.title = 'Delete my comment'; del.textContent = '✕';
+      del.onclick = async () => {
+        if (!confirm('Delete this comment?')) return;
+        const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
+        if (!r.ok) { alert('Could not delete comment'); return; }
+        loadComments(editingId); loadTickets();
+      };
+      head.appendChild(del);
+    }
+    const body = document.createElement('div');
+    body.className = 'comment-body'; body.textContent = c.body; // textContent: never interpreted as HTML
+    el.append(head, body);
+    commentList.appendChild(el);
+  });
+  if (nearBottom) commentList.scrollTop = commentList.scrollHeight;
+}
+
+async function loadComments(ticketId, quiet) {
+  try {
+    const res = await fetch(`/api/tickets/${ticketId}/comments`, { headers: authHeaders });
+    if (!res.ok) return;
+    const list = await res.json();
+    if (editingId !== ticketId) return; // modal was closed or switched meanwhile
+    renderComments(list);
+    if (!quiet) commentList.scrollTop = commentList.scrollHeight;
+  } catch (e) {}
+}
+
+async function postComment() {
+  const text = commentInput.value.trim();
+  if (!text || !editingId) return;
+  const btn = document.getElementById('commentSendBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/tickets/${editingId}/comments`, {
+      method: 'POST', headers: authHeaders, body: JSON.stringify({ body: text })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Could not post comment'); return; }
+    commentInput.value = '';
+    await loadComments(editingId);
+    commentList.scrollTop = commentList.scrollHeight;
+    loadTickets(); // refresh the 💬 count on the card
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById('commentSendBtn').onclick = postComment;
+commentInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); postComment(); } });
 
 // A plain window.open can't send an Authorization header, so fetch the CSV
 // with the header and trigger the download manually instead.

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, qaRequired } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
 
@@ -52,7 +52,7 @@ async function ticketExists(id) {
 }
 
 // Add a link
-router.post('/link', authRequired, async (req, res) => {
+router.post('/link', authRequired, qaRequired, async (req, res) => {
   try {
     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
     const raw = (req.body.url || '').trim();
@@ -78,7 +78,7 @@ router.post('/link', authRequired, async (req, res) => {
 
 // Upload an image or video. The browser sends the raw file as the request
 // body, with its mime type as Content-Type and the file name in X-Filename.
-router.post('/file', authRequired, express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
+router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
   try {
     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
     const mime = (req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
@@ -108,7 +108,7 @@ router.post('/file', authRequired, express.raw({ type: () => true, limit: '100mb
   }
 });
 
-router.delete('/:attId', authRequired, async (req, res) => {
+router.delete('/:attId', authRequired, qaRequired, async (req, res) => {
   try {
     const [rows] = await pool.execute(
       'SELECT * FROM attachments WHERE id = ? AND ticket_id = ?', [req.params.attId, req.params.id]

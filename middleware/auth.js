@@ -14,4 +14,26 @@ function authRequired(req, res, next) {
   }
 }
 
-module.exports = { authRequired, SECRET };
+// Admin = a QA account whose email is listed in the ADMIN_EMAILS env variable
+// (comma separated). Checked on every request, so removing an email takes effect immediately.
+function isAdminUser(u) {
+  if (!u || u.role !== 'QA' || !u.email) return false;
+  const list = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  return list.includes(String(u.email).toLowerCase());
+}
+
+function qaRequired(req, res, next) {
+  if (!req.user || req.user.role !== 'QA') {
+    return res.status(403).json({ error: 'Only QA members can do this. Developers can update the status and leave comments.' });
+  }
+  next();
+}
+
+function adminRequired(req, res, next) {
+  authRequired(req, res, () => {
+    if (!isAdminUser(req.user)) return res.status(403).json({ error: 'QA Admin access only' });
+    next();
+  });
+}
+
+module.exports = { authRequired, qaRequired, adminRequired, isAdminUser, SECRET };
