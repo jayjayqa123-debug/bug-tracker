@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bug List - Jira Style View</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand-nav">
+    <h1>🐛 Bug Tracker</h1>
+    <nav class="view-menu">
+      <a href="board.html" class="nav-link">Board</a>
+      <a href="list.html" class="nav-link active">List of Bugs</a>
+    </nav>
+  </div>
+  <div class="platform-tabs" id="platformTabs">
+    <button data-platform="Android" class="active">Android</button>
+    <button data-platform="iOS">iOS</button>
+    <button data-platform="Web">Web</button>
+  </div>
+  <div class="top-actions">
+    <span class="who" id="whoAmI"></span>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+</header>
+
+<div class="list-container">
+  <div class="list-controls">
+    <input type="text" id="searchInput" placeholder="Search bugs by key or title…">
+    <select id="statusFilter"><option value="">All Statuses</option></select>
+    <select id="priorityFilter"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select>
+  </div>
+
+  <div class="table-card">
+    <table class="bug-table">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Severity</th>
+          <th>Assignee</th>
+          <th>Filed By</th>
+        </tr>
+      </thead>
+      <tbody id="bugTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('token');
+const user = JSON.parse(localStorage.getItem('user') || 'null');
+if (!token || !user) window.location.href = 'index.html';
+const authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+
+let currentPlatform = 'Android';
+let tickets = [];
+let devs = [];
+
+document.getElementById('whoAmI').textContent = `${user.name} (${user.role})`;
+document.getElementById('logoutBtn').onclick = () => { localStorage.clear(); window.location.href = 'index.html'; };
+
+document.querySelectorAll('#platformTabs button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#platformTabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPlatform = btn.dataset.platform;
+    loadData();
+  };
+});
+
+async function loadData() {
+  const [dRes, tRes] = await Promise.all([
+    fetch(`/api/tickets/devs?platform=${currentPlatform}`, { headers: authHeaders }),
+    fetch(`/api/tickets?platform=${currentPlatform}`, { headers: authHeaders })
+  ]);
+  devs = await dRes.json();
+  tickets = await tRes.json();
+  renderTable();
+}
+
+function assigneeName(id) {
+  const d = devs.find(x => x.id === id);
+  return d ? d.name : 'Unassigned';
+}
+
+function renderTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const status = document.getElementById('statusFilter').value;
+  const prio = document.getElementById('priorityFilter').value;
+
+  const filtered = tickets.filter(t => {
+    const matchSearch = (t.ticket_number || '').toLowerCase().includes(search) || t.title.toLowerCase().includes(search);
+    const matchStatus = !status || t.status === status;
+    const matchPrio = !prio || t.priority === prio;
+    return matchSearch && matchStatus && matchPrio;
+  });
+
+  const tbody = document.getElementById('bugTableBody');
+  tbody.innerHTML = filtered.map(t => `
+    <tr onclick="window.location.href='board.html?ticket=${t.id}'">
+      <td class="tno">${t.ticket_number}</td>
+      <td><strong>${t.title}</strong></td>
+      <td><span class="pill info">${t.status}</span></td>
+      <td><span class="badge prio-${t.priority}">${t.priority}</span></td>
+      <td><span class="badge sev-${t.severity}">${t.severity}</span></td>
+      <td>${assigneeName(t.assignee_id)}</td>
+      <td>${t.filed_by_name || ''}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('searchInput').oninput = renderTable;
+document.getElementById('statusFilter').onchange = renderTable;
+document.getElementById('priorityFilter').onchange = renderTable;
+
+fetch('/api/tickets/statuses', { headers: authHeaders })
+  .then(r => r.json())
+  .then(list => {
+    const sel = document.getElementById('statusFilter');
+    sel.innerHTML = '<option value="">All Statuses</option>' + list.map(s => `<option value="${s}">${s}</option>`).join('');
+  });
+
+loadData();
+</script>
+</body>
+</html>

@@ -19,10 +19,10 @@ let currentPlatform = 'Android';
 let tickets = [];
 let devs = [];
 let editingId = null;
-let currentAttachments = []; // saved attachments of the ticket being edited
-let pendingAttachments = []; // attachments queued while filing a new ticket
+let currentAttachments = [];
+let pendingAttachments = [];
+let autoRefreshTimer = null;
 
-// Refresh role/admin info from the server (picks up admin access and forced password changes)
 (async function refreshMe() {
   try {
     const res = await fetch('/api/auth/me', { headers: authHeaders });
@@ -37,6 +37,7 @@ let pendingAttachments = []; // attachments queued while filing a new ticket
     if (fresh.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
   } catch (e) {}
 })();
+
 if (user && user.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
 document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
 
@@ -59,7 +60,6 @@ document.querySelectorAll('#platformTabs button').forEach(btn => {
 });
 
 function visibleStatuses() {
-  // "Filed Ticket List for Host" only applies to Android and iOS, not Web
   if (currentPlatform === 'Web') return ALL_STATUSES.filter(s => s !== 'Filed Ticket List for Host');
   return ALL_STATUSES;
 }
@@ -85,10 +85,11 @@ async function loadStats() {
   `).join('');
 }
 
-async function loadTickets() {
+async function loadTickets(silent = false) {
   const res = await fetch(`/api/tickets?platform=${currentPlatform}`, { headers: authHeaders });
   tickets = await res.json();
   renderBoard();
+  if (!silent) checkUrlForTicket();
 }
 
 function renderBoard() {
@@ -109,7 +110,7 @@ function renderBoard() {
       e.preventDefault(); body.classList.remove('dragover');
       const id = e.dataTransfer.getData('text/plain');
       await fetch(`/api/tickets/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
-      loadTickets(); loadStats();
+      loadTickets(true); loadStats();
     });
 
     inColumn.forEach(t => body.appendChild(renderCard(t)));
@@ -141,10 +142,10 @@ function renderCard(t) {
   `;
   card.querySelector('.share-btn').onclick = (e) => {
     e.stopPropagation();
-    const link = `${window.location.origin}/share.html?token=${t.share_token}`;
-    navigator.clipboard.writeText(link).then(() => alert('Share link copied:\n' + link));
+    const link = `${window.location.origin}/board.html?ticket=${t.id}`;
+    navigator.clipboard.writeText(link).then(() => alert('In-board pop-up link copied:\n' + link));
   };
-  card.onclick = () => openModal(t);
+  card.onclick = () => openModal(t, true);
   return card;
 }
 
@@ -152,7 +153,7 @@ function escapeHtml(str) {
   return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
 
-// ---------- Modal ----------
+// ---------- Trello-style Pop-up Modal & History Router ----------
 const overlay = document.getElementById('ticketOverlay');
 const form = document.getElementById('ticketForm');
 
@@ -161,10 +162,15 @@ function fillStatusSelect() {
   sel.innerHTML = visibleStatuses().map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
-function openModal(ticket) {
+function openModal(ticket, updateUrl = true) {
   fillStatusSelect();
   editingId = ticket ? ticket.id : null;
   document.getElementById('modalTitle').textContent = ticket ? 'Ticket Details' : 'File New Ticket';
+  
+  if (updateUrl && ticket) {
+    history.pushState({ ticketId: ticket.id }, '', `?ticket=${ticket.id}`);
+  }
+
   const numInput = document.getElementById('tNumber');
   if (ticket) {
     numInput.value = ticket.ticket_number || '';
@@ -175,7 +181,10 @@ function openModal(ticket) {
       .then(d => { if (d.ticket_number && !editingId) numInput.value = d.ticket_number; })
       .catch(() => {});
   }
-  document.getElementById('tTitle').value = ticket ? ticket.title : '';
+
+  const titleEl = document.getElementById('tTitle');
+  titleEl.value = ticket ? ticket.title : '';
+  
   document.getElementById('tDescription').value = ticket ? ticket.description : '';
   document.getElementById('tPriority').value = ticket ? ticket.priority : 'Medium';
   document.getElementById('tSeverity').value = ticket ? ticket.severity : 'Minor';
@@ -189,7 +198,7 @@ function openModal(ticket) {
     filedByWrap.style.display = 'block';
     document.getElementById('tFiledBy').value = ticket.filed_by_name || '';
     shareWrap.style.display = 'block';
-    document.getElementById('tShareLink').value = `${window.location.origin}/share.html?token=${ticket.share_token}`;
+    document.getElementById('tShareLink').value = `${window.location.origin}/board.html?ticket=${ticket.id}`;
     deleteBtn.style.display = user.role === 'QA' ? 'inline-block' : 'none';
   } else {
     filedByWrap.style.display = 'none';
@@ -203,19 +212,44 @@ function openModal(ticket) {
   setAttachStatus('');
   renderAttachments();
   overlay.classList.add('open');
-  autoGrow(); // must run after the modal is visible so scrollHeight is correct
+  autoGrow();
+  autoGrowTitle();
+  // Dynamic auto-grow height logic for Title and Description fields
+const titleTextarea = document.getElementById('tTitle');
+const descTextarea = document.getElementById('tDescription');
+
+function autoGrowElement(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.max(el.scrollHeight, 48) + 'px';
 }
 
-// Developers can read a ticket, change its status and comment - but not edit it.
-const EDIT_FIELDS = ['tTitle', 'tDescription', 'tPriority', 'tSeverity', 'tAssignee'];
+function autoGrowAll() {
+  autoGrowElement(titleTextarea);
+  autoGrowElement(descTextarea);
+}
+
+titleTextarea.addEventListener('input', () => autoGrowElement(titleTextarea));
+descTextarea.addEventListener('input', () => autoGrowElement(descTextarea));
+}
+
 function applyRoleRestrictions(ticket) {
   const isQA = user.role === 'QA';
-  EDIT_FIELDS.forEach(id => { document.getElementById(id).disabled = !isQA; });
+  const isDev = user.role === 'Dev';
+
+  document.getElementById('tTitle').disabled = !isQA;
+  document.getElementById('tDescription').disabled = !isQA;
+  document.getElementById('tPriority').disabled = !isQA;
+  document.getElementById('tSeverity').disabled = !isQA;
+
+  // Devs can modify assignee!
+  document.getElementById('tAssignee').disabled = !(isQA || isDev);
+
   document.querySelector('.attach-actions').style.display = isQA ? 'flex' : 'none';
   document.getElementById('modalTitle').textContent =
-    !ticket ? 'File New Ticket' : (isQA ? 'Ticket Details' : 'Ticket Details (read-only)');
-  form.querySelector('.btn-save').textContent = isQA ? 'Save' : 'Update Status';
-  // Comments only make sense on a saved ticket
+    !ticket ? 'File New Ticket' : (isQA ? 'Ticket Details' : 'Ticket Details');
+  form.querySelector('.btn-save').textContent = 'Save Updates';
+
   document.getElementById('commentsWrap').style.display = ticket ? 'block' : 'none';
   document.getElementById('commentList').innerHTML = '';
   document.getElementById('commentInput').value = '';
@@ -223,22 +257,47 @@ function applyRoleRestrictions(ticket) {
   if (ticket) { loadComments(ticket.id); startCommentPolling(ticket.id); }
 }
 
-function closeModal() {
+function closeModal(updateUrl = true) {
   stopCommentPolling();
   overlay.classList.remove('open'); editingId = null; form.reset();
   pendingAttachments.forEach(p => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
   pendingAttachments = []; currentAttachments = [];
+
+  if (updateUrl && window.location.search.includes('ticket=')) {
+    history.pushState(null, '', window.location.pathname);
+  }
 }
 
-document.getElementById('cancelBtn').onclick = closeModal;
-document.getElementById('newTicketBtn').onclick = () => openModal(null);
-document.getElementById('fabAdd').onclick = () => openModal(null);
+function checkUrlForTicket() {
+  const params = new URLSearchParams(window.location.search);
+  const ticketId = params.get('ticket');
+  if (ticketId && (!editingId || editingId !== ticketId)) {
+    const t = tickets.find(x => x.id === ticketId);
+    if (t) openModal(t, false);
+  }
+}
+
+window.addEventListener('popstate', () => {
+  const params = new URLSearchParams(window.location.search);
+  const ticketId = params.get('ticket');
+  if (ticketId) {
+    const t = tickets.find(x => x.id === ticketId);
+    if (t) openModal(t, false);
+  } else {
+    closeModal(false);
+  }
+});
+
+document.getElementById('backBtn').onclick = () => closeModal(true);
+document.getElementById('cancelBtn').onclick = () => closeModal(true);
+document.getElementById('newTicketBtn').onclick = () => openModal(null, false);
+document.getElementById('fabAdd').onclick = () => openModal(null, false);
 
 document.getElementById('deleteBtn').onclick = async () => {
   if (!editingId) return;
   if (!confirm('Delete this ticket permanently?')) return;
   await fetch(`/api/tickets/${editingId}`, { method: 'DELETE', headers: authHeaders });
-  closeModal(); loadTickets(); loadStats();
+  closeModal(true); loadTickets(true); loadStats();
 };
 
 form.onsubmit = async (e) => {
@@ -255,10 +314,9 @@ form.onsubmit = async (e) => {
   saveBtn.disabled = true;
   try {
     if (editingId) {
-      if (user.role === 'QA') {
-        const r = await fetch(`/api/tickets/${editingId}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(payload) });
-        if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save the ticket'); return; }
-      }
+      const r = await fetch(`/api/tickets/${editingId}`, { method: 'PUT', headers: authHeaders, body: JSON.stringify(payload) });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save update'); return; }
+      
       const newStatus = document.getElementById('tStatus').value;
       await fetch(`/api/tickets/${editingId}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status: newStatus }) });
     } else {
@@ -267,7 +325,6 @@ form.onsubmit = async (e) => {
       const data = await res.json();
       if (!res.ok) { alert(data.error); return; }
 
-      // Ticket is saved - now send the attachments queued while filing it
       const failed = [];
       for (let i = 0; i < pendingAttachments.length; i++) {
         const p = pendingAttachments[i];
@@ -282,20 +339,31 @@ form.onsubmit = async (e) => {
   } finally {
     saveBtn.disabled = false;
   }
-  closeModal();
-  loadTickets(); loadStats();
+  closeModal(true);
+  loadTickets(true); loadStats();
 };
 
-// ---------- Description: expand to show the full text ----------
+// ---------- Auto-grow Title and Description for full view ----------
+const titleTextarea = document.getElementById('tTitle');
+function autoGrowTitle() {
+  titleTextarea.style.height = 'auto';
+  titleTextarea.style.height = (titleTextarea.scrollHeight) + 'px';
+}
+titleTextarea.addEventListener('input', autoGrowTitle);
+
 const descEl = document.getElementById('tDescription');
 function autoGrow() {
   descEl.style.height = 'auto';
   descEl.style.height = descEl.scrollHeight + 'px';
 }
 descEl.addEventListener('input', autoGrow);
-window.addEventListener('resize', () => { if (overlay.classList.contains('open')) autoGrow(); });
+window.addEventListener('resize', () => { 
+  if (overlay.classList.contains('open')) {
+    autoGrow(); autoGrowTitle();
+  }
+});
 
-// ---------- Attachments (link / image / video) ----------
+// ---------- Attachments ----------
 const MAX_IMAGE = 10 * 1024 * 1024;
 const MAX_VIDEO = 100 * 1024 * 1024;
 const attachList = document.getElementById('attachList');
@@ -395,7 +463,6 @@ async function addFiles(type, fileList) {
     if (!file.type.startsWith(type + '/')) { alert(`"${file.name}" is not a ${type} file.`); continue; }
     if (file.size > limit) { alert(`"${file.name}" is too large (max ${limitLabel} per ${type}).`); continue; }
     if (editingId) {
-      // Ticket already saved: upload straight away
       setAttachStatus(`Uploading ${file.name}…`);
       try {
         currentAttachments.push(await uploadFile(editingId, file));
@@ -403,7 +470,6 @@ async function addFiles(type, fileList) {
       } catch (err) { alert(`Could not upload "${file.name}": ${err.message}`); }
       setAttachStatus('');
     } else {
-      // New ticket: queue until the ticket is saved
       pendingAttachments.push({ type, file, name: file.name, previewUrl: URL.createObjectURL(file) });
       renderAttachments();
     }
@@ -439,7 +505,7 @@ async function addLink() {
 document.getElementById('linkAddBtn').onclick = addLink;
 linkInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } });
 
-// ---------- Comments (QA <-> Dev) ----------
+// ---------- Comments ----------
 const commentList = document.getElementById('commentList');
 const commentInput = document.getElementById('commentInput');
 let commentTimer = null;
@@ -476,12 +542,12 @@ function renderComments(list) {
         if (!confirm('Delete this comment?')) return;
         const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
         if (!r.ok) { alert('Could not delete comment'); return; }
-        loadComments(editingId); loadTickets();
+        loadComments(editingId); loadTickets(true);
       };
       head.appendChild(del);
     }
     const body = document.createElement('div');
-    body.className = 'comment-body'; body.textContent = c.body; // textContent: never interpreted as HTML
+    body.className = 'comment-body'; body.textContent = c.body;
     el.append(head, body);
     commentList.appendChild(el);
   });
@@ -493,7 +559,7 @@ async function loadComments(ticketId, quiet) {
     const res = await fetch(`/api/tickets/${ticketId}/comments`, { headers: authHeaders });
     if (!res.ok) return;
     const list = await res.json();
-    if (editingId !== ticketId) return; // modal was closed or switched meanwhile
+    if (editingId !== ticketId) return;
     renderComments(list);
     if (!quiet) commentList.scrollTop = commentList.scrollHeight;
   } catch (e) {}
@@ -513,7 +579,7 @@ async function postComment() {
     commentInput.value = '';
     await loadComments(editingId);
     commentList.scrollTop = commentList.scrollHeight;
-    loadTickets(); // refresh the 💬 count on the card
+    loadTickets(true);
   } finally {
     btn.disabled = false;
   }
@@ -521,8 +587,6 @@ async function postComment() {
 document.getElementById('commentSendBtn').onclick = postComment;
 commentInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); postComment(); } });
 
-// A plain window.open can't send an Authorization header, so fetch the CSV
-// with the header and trigger the download manually instead.
 document.getElementById('exportBtn').onclick = async () => {
   const res = await fetch(`/api/export/csv?platform=${currentPlatform}`, { headers: authHeaders });
   const blob = await res.blob();
@@ -533,10 +597,22 @@ document.getElementById('exportBtn').onclick = async () => {
   URL.revokeObjectURL(url);
 };
 
+// ---------- Auto Refresh Feature (Polling every 4 seconds) ----------
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(async () => {
+    // Only auto-refresh background data if modal is not active or actively being edited
+    await loadTickets(true);
+    await loadStats();
+  }, 4000);
+}
+
 async function loadAll() {
   await loadDevs();
   await loadTickets();
   await loadStats();
+  startAutoRefresh();
 }
 
 loadAll();
+

@@ -1,103 +1,115 @@
-const token = localStorage.getItem('token');
-const me = JSON.parse(localStorage.getItem('user') || 'null');
-if (!token || !me) window.location.href = 'index.html';
-const authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-document.getElementById('whoAmI').textContent = me ? `${me.name} (${me.role})` : '';
-document.getElementById('backBtn').onclick = () => { window.location.href = 'board.html'; };
+  if (!token) {
+    window.location.href = 'index.html';
+    return;
+  }
 
-let users = [];
-const rows = document.getElementById('userRows');
-
-function cell(tr, text) { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); return td; }
-function pill(text, cls) { const s = document.createElement('span'); s.className = 'pill ' + (cls || ''); s.textContent = text; return s; }
-function fmt(d) { return d ? new Date(d.replace(' ', 'T')).toLocaleDateString() : ''; }
-
-function render() {
-  const q = document.getElementById('search').value.trim().toLowerCase();
-  const role = document.getElementById('roleFilter').value;
-  const list = users.filter(u =>
-    (!role || u.role === role) &&
-    (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
-  const pending = users.filter(u => u.reset_requested_at).length;
-  document.getElementById('summary').textContent =
-    `${list.length} of ${users.length} accounts` + (pending ? ` · ${pending} password reset request${pending > 1 ? 's' : ''} waiting` : '');
-
-  rows.innerHTML = '';
-  if (!list.length) { const tr = document.createElement('tr'); cell(tr, 'No matching accounts.').colSpan = 8; rows.appendChild(tr); return; }
-  list.forEach(u => {
-    const tr = document.createElement('tr');
-    if (u.reset_requested_at) tr.className = 'requested';
-    cell(tr, u.name);
-    cell(tr, u.email);
-    cell(tr, u.role);
-    cell(tr, u.platform || '—');
-    const signin = document.createElement('td');
-    if (u.has_password) signin.appendChild(pill('Password'));
-    if (u.has_google) { signin.appendChild(document.createTextNode(' ')); signin.appendChild(pill('Google', 'info')); }
-    tr.appendChild(signin);
-    const status = document.createElement('td');
-    if (u.reset_requested_at) status.appendChild(pill('Reset requested ' + fmt(u.reset_requested_at), 'warn'));
-    else if (u.must_change_password) status.appendChild(pill('Temp password issued', 'info'));
-    else status.textContent = '—';
-    tr.appendChild(status);
-    cell(tr, fmt(u.created_at));
-    const act = document.createElement('td');
-    const btn = document.createElement('button');
-    btn.className = 'btn-small'; btn.textContent = 'Reset password';
-    if (!u.has_password) { btn.disabled = true; btn.title = 'Google-only account: no password to reset'; }
-    btn.onclick = () => resetPassword(u, btn);
-    act.appendChild(btn);
-    tr.appendChild(act);
-    rows.appendChild(tr);
+  document.getElementById('whoAmI').textContent = `${user.name || 'User'} (${user.role || 'QA'})`;
+  document.getElementById('backBtn').addEventListener('click', () => {
+    window.location.href = 'board.html';
   });
-}
 
-async function load() {
-  try {
-    const res = await fetch('/api/admin/users', { headers: authHeaders });
-    if (res.status === 401) { localStorage.clear(); window.location.href = 'index.html'; return; }
-    if (res.status === 403) {
-      rows.innerHTML = '';
-      const tr = document.createElement('tr');
-      cell(tr, 'You do not have QA Admin access. Ask the site owner to add your email to ADMIN_EMAILS.').colSpan = 8;
-      rows.appendChild(tr); return;
+  const userRows = document.getElementById('userRows');
+  const searchInput = document.getElementById('search');
+  const roleFilter = document.getElementById('roleFilter');
+  const summary = document.getElementById('summary');
+
+  const pwOverlay = document.getElementById('pwOverlay');
+  const pwFor = document.getElementById('pwFor');
+  const pwValue = document.getElementById('pwValue');
+  const pwCopy = document.getElementById('pwCopy');
+  const pwClose = document.getElementById('pwClose');
+
+  let allUsers = [];
+
+  async function loadUsers() {
+    try {
+      const res = await fetch('/api/admin/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch users');
+      allUsers = await res.json();
+      renderTable();
+    } catch (err) {
+      userRows.innerHTML = `<tr><td colspan="8" style="color:var(--urgent, #ef4444);">Error loading user accounts.</td></tr>`;
     }
-    users = await res.json();
-    render();
-  } catch (e) {
-    rows.innerHTML = '<tr><td colspan="8">Could not reach the server.</td></tr>';
   }
-}
 
-async function resetPassword(u, btn) {
-  if (!confirm(`Reset the password for ${u.name} (${u.email})?\n\nTheir current password will stop working.`)) return;
-  btn.disabled = true;
-  try {
-    const res = await fetch(`/api/admin/users/${u.id}/reset-password`, { method: 'POST', headers: authHeaders });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || 'Could not reset password'); return; }
-    document.getElementById('pwFor').textContent = `New temporary password for ${data.name} (${u.email}):`;
-    document.getElementById('pwValue').textContent = data.temporaryPassword;
-    document.getElementById('pwOverlay').classList.add('open');
-    load();
-  } catch (e) {
-    alert('Could not reach the server.');
-  } finally {
-    btn.disabled = false;
+  function renderTable() {
+    const query = searchInput.value.toLowerCase().trim();
+    const role = roleFilter.value;
+
+    const filtered = allUsers.filter(u => {
+      const matchSearch = u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
+      const matchRole = !role || u.role === role;
+      return matchSearch && matchRole;
+    });
+
+    summary.textContent = `${filtered.length} of ${allUsers.length} accounts`;
+
+    if (filtered.length === 0) {
+      userRows.innerHTML = `<tr><td colspan="8">No matching user accounts found.</td></tr>`;
+      return;
+    }
+
+    userRows.innerHTML = filtered.map(u => `
+      <tr>
+        <td><strong>${escapeHtml(u.name)}</strong></td>
+        <td>${escapeHtml(u.email)}</td>
+        <td><span class="badge-role ${u.role}">${u.role}</span></td>
+        <td>${u.platform || '—'}</td>
+        <td>${u.googleId ? 'Google' : 'Password'}</td>
+        <td>${u.mustChangePassword ? 'Pending Reset' : 'Active'}</td>
+        <td>${new Date(u.createdAt || Date.now()).toLocaleDateString()}</td>
+        <td>
+          <button class="btn-reset-pw" onclick="resetPassword('${u.id}', '${escapeHtml(u.email)}')">Reset password</button>
+        </td>
+      </tr>
+    `).join('');
   }
-}
 
-document.getElementById('pwCopy').onclick = () => {
-  const pw = document.getElementById('pwValue').textContent;
-  navigator.clipboard.writeText(pw).then(() => { document.getElementById('pwCopy').textContent = 'Copied ✓'; });
-};
-document.getElementById('pwClose').onclick = () => {
-  document.getElementById('pwOverlay').classList.remove('open');
-  document.getElementById('pwValue').textContent = '';
-  document.getElementById('pwCopy').textContent = 'Copy';
-};
-document.getElementById('search').addEventListener('input', render);
-document.getElementById('roleFilter').addEventListener('change', render);
+  window.resetPassword = async (userId, email) => {
+    if (!confirm(`Are you sure you want to reset the password for ${email}?`)) return;
 
-load();
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+
+      pwFor.textContent = `Temporary password generated for ${email}:`;
+      pwValue.textContent = data.tempPassword;
+      pwOverlay.classList.add('open');
+      loadUsers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  pwCopy.addEventListener('click', () => {
+    navigator.clipboard.writeText(pwValue.textContent);
+    pwCopy.textContent = 'Copied!';
+    setTimeout(() => { pwCopy.textContent = 'Copy'; }, 1500);
+  });
+
+  pwClose.addEventListener('click', () => {
+    pwOverlay.classList.remove('open');
+  });
+
+  searchInput.addEventListener('input', renderTable);
+  roleFilter.addEventListener('change', renderTable);
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  loadUsers();
+});

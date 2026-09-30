@@ -8,8 +8,6 @@ const commentsRouter = require('./comments');
 
 const router = express.Router();
 
-// Board columns, in order. "Filed Ticket List for Host" is only relevant
-// for Android and iOS platforms - the frontend hides it for Web.
 const STATUSES = [
   'On Filing',
   'Filed Ticket List',
@@ -26,8 +24,6 @@ router.use('/:id/comments', commentsRouter);
 
 router.get('/statuses', (req, res) => res.json(STATUSES));
 
-// List devs, used to populate the Assignee dropdown on a card.
-// Pass ?platform=Android|iOS|Web to only get devs on that platform team.
 router.get('/devs', authRequired, async (req, res) => {
   try {
     let sql = "SELECT id, name, platform FROM users WHERE role = 'Dev'";
@@ -44,7 +40,6 @@ router.get('/devs', authRequired, async (req, res) => {
   }
 });
 
-// Preview of the ticket number the next filed ticket will get (form shows it)
 router.get('/next-number', authRequired, async (req, res) => {
   try {
     if (!['Android', 'iOS', 'Web'].includes(req.query.platform)) {
@@ -57,7 +52,6 @@ router.get('/next-number', authRequired, async (req, res) => {
   }
 });
 
-// Public, no-auth view for the shareable ticket link
 router.get('/share/:token', async (req, res) => {
   try {
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE share_token = ?', [req.params.token]);
@@ -101,8 +95,6 @@ router.get('/:id', authRequired, async (req, res) => {
   }
 });
 
-// File a new ticket. Only QA accounts may file - "filed by" is taken
-// automatically from the logged-in QA member, never typed manually.
 router.post('/', authRequired, async (req, res) => {
   try {
     if (req.user.role !== 'QA') {
@@ -135,25 +127,35 @@ router.post('/', authRequired, async (req, res) => {
   }
 });
 
-// Edit ticket fields (title, description, priority, severity, assignee).
-// QA only - developers can move the status and comment, but not edit the ticket.
-router.put('/:id', authRequired, qaRequired, async (req, res) => {
+// Edit ticket fields: QA can edit everything; Devs can edit assignee_id
+router.put('/:id', authRequired, async (req, res) => {
   try {
     const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
     const t = existing[0];
     const { title, description, priority, severity, assignee_id } = req.body;
-    await pool.execute(
-      `UPDATE tickets SET title = ?, description = ?, priority = ?, severity = ?, assignee_id = ? WHERE id = ?`,
-      [
-        title !== undefined ? title : t.title,
-        description !== undefined ? description : t.description,
-        priority !== undefined ? priority : t.priority,
-        severity !== undefined ? severity : t.severity,
-        assignee_id !== undefined ? (assignee_id || null) : t.assignee_id,
-        req.params.id
-      ]
-    );
+
+    if (req.user.role === 'QA') {
+      await pool.execute(
+        `UPDATE tickets SET title = ?, description = ?, priority = ?, severity = ?, assignee_id = ? WHERE id = ?`,
+        [
+          title !== undefined ? title : t.title,
+          description !== undefined ? description : t.description,
+          priority !== undefined ? priority : t.priority,
+          severity !== undefined ? severity : t.severity,
+          assignee_id !== undefined ? (assignee_id || null) : t.assignee_id,
+          req.params.id
+        ]
+      );
+    } else if (req.user.role === 'Dev') {
+      await pool.execute(
+        `UPDATE tickets SET assignee_id = ? WHERE id = ?`,
+        [assignee_id !== undefined ? (assignee_id || null) : t.assignee_id, req.params.id]
+      );
+    } else {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
   } catch (err) {
@@ -162,7 +164,6 @@ router.put('/:id', authRequired, qaRequired, async (req, res) => {
   }
 });
 
-// Move a card between board columns (drag & drop uses this)
 router.put('/:id/status', authRequired, async (req, res) => {
   try {
     const { status } = req.body;
