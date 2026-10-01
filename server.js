@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs'); // <--- 1. Import fs module
 
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
@@ -10,10 +11,19 @@ const adminRoutes = require('./routes/admin');
 const { migrate } = require('./db/migrate');
 
 const app = express();
+
+// 2. Ensure root 'uploads' folder exists BEFORE mounting static route
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json());
+
+// 3. Mount static file handlers
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
@@ -24,7 +34,6 @@ app.get('/', (req, res) => res.redirect('/index.html'));
 
 const PORT = process.env.PORT || 3000;
 
-// Create/upgrade database tables first, then start the server
 migrate()
   .then(() => {
     console.log('Database migration completed');

@@ -19,6 +19,9 @@ const STATUSES = [
   'Closed'
 ];
 
+// Allowed platforms for validation - Updated for both 77 Live Android and 77 Live iOS
+const ALLOWED_PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live iOS'];
+
 router.use('/:id/attachments', attachmentsRouter);
 router.use('/:id/comments', commentsRouter);
 
@@ -42,7 +45,7 @@ router.get('/devs', authRequired, async (req, res) => {
 
 router.get('/next-number', authRequired, async (req, res) => {
   try {
-    if (!['Android', 'iOS', 'Web'].includes(req.query.platform)) {
+    if (!ALLOWED_PLATFORMS.includes(req.query.platform)) {
       return res.status(400).json({ error: 'Invalid platform' });
     }
     res.json({ ticket_number: await peekNumber(req.query.platform) });
@@ -102,8 +105,8 @@ router.post('/', authRequired, async (req, res) => {
     }
     const { title, description, platform, priority, severity, assignee_id } = req.body;
     if (!title || !platform) return res.status(400).json({ error: 'Title and platform are required' });
-    if (!['Android', 'iOS', 'Web'].includes(platform)) {
-      return res.status(400).json({ error: 'Platform must be Android, iOS, or Web' });
+    if (!ALLOWED_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ error: 'Invalid platform specified' });
     }
     const id = uuidv4();
     const shareToken = uuidv4();
@@ -164,21 +167,26 @@ router.put('/:id', authRequired, async (req, res) => {
   }
 });
 
+// Safely update ticket status and timestamps without raw string interpolation
 router.put('/:id/status', authRequired, async (req, res) => {
   try {
     const { status } = req.body;
     if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
-    const t = existing[0];
 
-    const setFixedAt = status === 'Complete (For Retest)' && !t.fixed_at;
-    const closedAtClause = status === 'Closed' ? 'NOW()' : 'NULL';
+    const isComplete = status === 'Complete (For Retest)';
+    const isClosed = status === 'Closed';
 
     await pool.execute(
-      `UPDATE tickets SET status = ?, fixed_at = ${setFixedAt ? 'NOW()' : 'fixed_at'}, closed_at = ${closedAtClause} WHERE id = ?`,
-      [status, req.params.id]
+      `UPDATE tickets 
+       SET status = ?, 
+           fixed_at = CASE WHEN ? = TRUE AND fixed_at IS NULL THEN NOW() ELSE fixed_at END,
+           closed_at = CASE WHEN ? = TRUE THEN NOW() ELSE NULL END 
+       WHERE id = ?`,
+      [status, isComplete, isClosed, req.params.id]
     );
+
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
   } catch (err) {

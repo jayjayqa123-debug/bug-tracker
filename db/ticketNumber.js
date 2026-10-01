@@ -1,12 +1,19 @@
-// Generates ticket numbers like AND-0001, IOS-0001, WEB-0001.
+// Generates ticket numbers like AND-0001, IOS-0001, WEB-0001, 77AND-0001, 77IOS-0001.
 // Each platform has its own counter row, updated atomically so two QA members
 // filing at the same moment can never get the same number.
 const pool = require('./pool');
 
-const PREFIX = { Android: 'AND', iOS: 'IOS', Web: 'WEB' };
+const PREFIX = {
+  Android: 'AND',
+  iOS: 'IOS',
+  Web: 'WEB',
+  '77 Live Android': '77AND',
+  '77 Live iOS': '77IOS'
+};
 
 function format(platform, n) {
-  return `${PREFIX[platform]}-${String(n).padStart(4, '0')}`;
+  const prefix = PREFIX[platform] || 'TCK';
+  return `${prefix}-${String(n).padStart(4, '0')}`;
 }
 
 async function nextNumber(platform) {

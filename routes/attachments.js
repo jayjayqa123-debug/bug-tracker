@@ -1,5 +1,5 @@
 // Attachments for a ticket: links, images and videos.
-// Mounted at /api/tickets/:id/attachments  (see routes/tickets.js)
+// Mounted at /api/tickets/:id/attachments (see routes/tickets.js)
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -9,8 +9,11 @@ const { authRequired, qaRequired } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
 
+// Ensure upload directory exists in the project root
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 const MAX_IMAGE = 10 * 1024 * 1024;   // 10 MB
 const MAX_VIDEO = 100 * 1024 * 1024;  // 100 MB
@@ -18,6 +21,7 @@ const MAX_VIDEO = 100 * 1024 * 1024;  // 100 MB
 // Allowed upload types: mime -> [attachment type, file extension]
 const FILE_TYPES = {
   'image/jpeg': ['image', '.jpg'],
+  'image/jpg': ['image', '.jpg'],
   'image/png': ['image', '.png'],
   'image/gif': ['image', '.gif'],
   'image/webp': ['image', '.webp'],
@@ -29,20 +33,31 @@ const FILE_TYPES = {
 
 async function attachmentsFor(ticketIds) {
   const map = {};
-  if (!ticketIds.length) return map;
+  if (!ticketIds || !ticketIds.length) return map;
+  
   ticketIds.forEach(id => { map[id] = []; });
+
+  // Dynamically generate placeholders (?, ?, ?) for SQL IN clause
+  const placeholders = ticketIds.map(() => '?').join(',');
   const [rows] = await pool.query(
-    'SELECT id, ticket_id, type, url, name, created_at FROM attachments WHERE ticket_id IN (?) ORDER BY created_at',
-    [ticketIds]
+    `SELECT id, ticket_id, type, url, name, created_at FROM attachments WHERE ticket_id IN (${placeholders}) ORDER BY created_at`,
+    ticketIds
   );
-  rows.forEach(r => map[r.ticket_id].push(r));
+
+  rows.forEach(r => {
+    if (map[r.ticket_id]) {
+      map[r.ticket_id].push(r);
+    }
+  });
+
   return map;
 }
 
 // Remove the stored file for an uploaded attachment (links have no file)
 function removeFile(att) {
-  if (att.type === 'link') return;
-  const file = path.join(UPLOAD_DIR, path.basename(att.url));
+  if (att.type === 'link' || !att.url) return;
+  const filename = path.basename(att.url);
+  const file = path.join(UPLOAD_DIR, filename);
   fs.unlink(file, () => {});
 }
 
@@ -51,6 +66,7 @@ async function ticketExists(id) {
   return !!rows[0];
 }
 
+// Add a link
 // Add a link
 router.post('/link', authRequired, qaRequired, async (req, res) => {
   try {
@@ -62,8 +78,16 @@ router.post('/link', authRequired, qaRequired, async (req, res) => {
       return res.status(400).json({ error: 'Only http:// and https:// links are allowed' });
     }
     if (raw.length > 1000) return res.status(400).json({ error: 'Link is too long' });
+
+    // Clean name fallback for Google Drive links
+    let defaultName = parsed.hostname;
+    if (parsed.hostname.includes('google.com')) {
+      defaultName = 'Google Drive File';
+    }
+
     const id = uuidv4();
-    const name = (req.body.name || parsed.hostname).toString().slice(0, 255);
+    const name = (req.body.name || defaultName).toString().slice(0, 255);
+
     await pool.execute(
       'INSERT INTO attachments (id, ticket_id, type, url, name) VALUES (?, ?, ?, ?, ?)',
       [id, req.params.id, 'link', raw, name]
@@ -76,15 +100,23 @@ router.post('/link', authRequired, qaRequired, async (req, res) => {
   }
 });
 
-// Upload an image or video. The browser sends the raw file as the request
-// body, with its mime type as Content-Type and the file name in X-Filename.
+// Upload an image or video
 router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
   try {
     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
-    const mime = (req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    
+    const rawHeader = req.headers['content-type'] || '';
+    const mime = rawHeader.split(';')[0].trim().toLowerCase();
     const kind = FILE_TYPES[mime];
-    if (!kind) return res.status(400).json({ error: 'Unsupported file type. Use JPG, PNG, GIF, WEBP, MP4, WEBM, MOV or OGV.' });
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Empty file' });
+
+    if (!kind) {
+      return res.status(400).json({ error: 'Unsupported file type. Use JPG, PNG, GIF, WEBP, MP4, WEBM, MOV or OGV.' });
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Empty file received' });
+    }
+
     const [type, ext] = kind;
     if (type === 'image' && req.body.length > MAX_IMAGE) return res.status(413).json({ error: 'Image is too large (max 10 MB)' });
     if (type === 'video' && req.body.length > MAX_VIDEO) return res.status(413).json({ error: 'Video is too large (max 100 MB)' });
@@ -95,15 +127,21 @@ router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, l
 
     const id = uuidv4();
     const stored = uuidv4() + ext;
+
+    // Write file directly to project root /uploads folder
     await fs.promises.writeFile(path.join(UPLOAD_DIR, stored), req.body);
+
+    const fileUrl = '/uploads/' + stored;
+
     await pool.execute(
       'INSERT INTO attachments (id, ticket_id, type, url, name) VALUES (?, ?, ?, ?, ?)',
-      [id, req.params.id, type, '/uploads/' + stored, name]
+      [id, req.params.id, type, fileUrl, name]
     );
+
     const [rows] = await pool.execute('SELECT * FROM attachments WHERE id = ?', [id]);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('Error during file upload:', err);
     res.status(500).json({ error: 'Server error uploading file' });
   }
 });
@@ -123,7 +161,7 @@ router.delete('/:attId', authRequired, qaRequired, async (req, res) => {
   }
 });
 
-// JSON errors (e.g. body too large) instead of Express's default HTML page
+// JSON error handler for express.raw limits or body errors
 router.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'File is too large (max 100 MB)' });
   console.error(err);

@@ -50,13 +50,16 @@ document.getElementById('logoutBtn').onclick = () => {
   window.location.href = 'index.html';
 };
 
-document.querySelectorAll('#platformTabs button').forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll('#platformTabs button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentPlatform = btn.dataset.platform;
-    loadAll();
-  };
+document.getElementById('platformTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  document.querySelectorAll('#platformTabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  currentPlatform = btn.getAttribute('data-platform');
+  loadTickets();
+  loadStats();
 });
 
 function visibleStatuses() {
@@ -72,29 +75,48 @@ async function loadDevs() {
 }
 
 async function loadStats() {
-  const res = await fetch(`/api/export/stats?platform=${currentPlatform}`, { headers: authHeaders });
-  const s = await res.json();
-  const bar = document.getElementById('statsBar');
-  const cards = [
-    ['Filed Today', s.filedToday], ['Fixed Today', s.fixedToday],
-    ['Still Active', s.stillActive], ['Closed Today', s.closedToday],
-    ['Pending Regression', s.pendingRegression], ['Total', s.total]
-  ];
-  bar.innerHTML = cards.map(([label, num]) => `
-    <div class="stat-card"><div class="num">${num}</div><div class="label">${label}</div></div>
-  `).join('');
+  try {
+    const res = await fetch(`/api/export/stats?platform=${currentPlatform}`, { headers: authHeaders });
+    if (!res.ok) return;
+    const s = await res.json();
+    
+    document.getElementById('filedTodayCount').textContent = s.filedToday ?? 0;
+    document.getElementById('fixedTodayCount').textContent = s.fixedToday ?? 0;
+    document.getElementById('totalFixedCount').textContent = s.totalFixed ?? (s.fixedToday || 0);
+    document.getElementById('stillActiveCount').textContent = s.stillActive ?? 0;
+    document.getElementById('reactiveCount').textContent = s.reactive ?? s.reactiveCount ?? s.reactive_count ?? 0;
+    document.getElementById('closedTodayCount').textContent = s.closedToday ?? 0;
+    document.getElementById('pendingRegressionCount').textContent = s.pendingRegression ?? 0;
+    document.getElementById('totalCount').textContent = s.total ?? 0;
+  } catch (err) {
+    console.error('Error loading stats:', err);
+  }
 }
 
 async function loadTickets(silent = false) {
   const res = await fetch(`/api/tickets?platform=${currentPlatform}`, { headers: authHeaders });
   tickets = await res.json();
   renderBoard();
-  if (!silent) checkUrlForTicket();
+  if (!silent) await checkUrlForTicket();
 }
 
 function renderBoard() {
   const board = document.getElementById('board');
+
+  // 1. Save scroll positions of window and all active column bodies
+  const mainScrollX = window.scrollX;
+  const mainScrollY = window.scrollY;
+  const scrollPositions = {};
+
+  document.querySelectorAll('.column-body').forEach(body => {
+    const status = body.getAttribute('data-status');
+    if (status) {
+      scrollPositions[status] = body.scrollTop;
+    }
+  });
+
   board.innerHTML = '';
+
   visibleStatuses().forEach(status => {
     const col = document.createElement('div');
     col.className = 'column';
@@ -102,6 +124,7 @@ function renderBoard() {
     col.innerHTML = `<div class="column-header"><span>${status}</span><span>${inColumn.length}</span></div>
       <div class="column-body" data-status="${status}"></div>`;
     board.appendChild(col);
+
     const body = col.querySelector('.column-body');
 
     body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('dragover'); });
@@ -114,7 +137,15 @@ function renderBoard() {
     });
 
     inColumn.forEach(t => body.appendChild(renderCard(t)));
+
+    // 2. Instantly restore vertical scroll position for each column
+    if (scrollPositions[status] !== undefined) {
+      body.scrollTop = scrollPositions[status];
+    }
   });
+
+  // 3. Restore main window scroll position
+  window.scrollTo(mainScrollX, mainScrollY);
 }
 
 function assigneeName(id) {
@@ -125,6 +156,7 @@ function assigneeName(id) {
 function renderCard(t) {
   const card = document.createElement('div');
   card.className = 'card';
+  card.setAttribute('data-ticket-id', t.id);
   card.draggable = true;
   card.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', t.id));
   card.innerHTML = `
@@ -140,11 +172,21 @@ function renderCard(t) {
     </div>
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
   `;
-  card.querySelector('.share-btn').onclick = (e) => {
+
+  card.querySelector('.share-btn').onclick = async (e) => {
     e.stopPropagation();
     const link = `${window.location.origin}/board.html?ticket=${t.id}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: t.title || 'Ticket Details', url: link });
+        return;
+      } catch (err) {}
+    }
+
     navigator.clipboard.writeText(link).then(() => alert('In-board pop-up link copied:\n' + link));
   };
+
   card.onclick = () => openModal(t, true);
   return card;
 }
@@ -153,7 +195,7 @@ function escapeHtml(str) {
   return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
 
-// ---------- Trello-style Pop-up Modal & History Router ----------
+// ---------- Pop-up Modal & History Router ----------
 const overlay = document.getElementById('ticketOverlay');
 const form = document.getElementById('ticketForm');
 
@@ -214,23 +256,6 @@ function openModal(ticket, updateUrl = true) {
   overlay.classList.add('open');
   autoGrow();
   autoGrowTitle();
-  // Dynamic auto-grow height logic for Title and Description fields
-const titleTextarea = document.getElementById('tTitle');
-const descTextarea = document.getElementById('tDescription');
-
-function autoGrowElement(el) {
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = Math.max(el.scrollHeight, 48) + 'px';
-}
-
-function autoGrowAll() {
-  autoGrowElement(titleTextarea);
-  autoGrowElement(descTextarea);
-}
-
-titleTextarea.addEventListener('input', () => autoGrowElement(titleTextarea));
-descTextarea.addEventListener('input', () => autoGrowElement(descTextarea));
 }
 
 function applyRoleRestrictions(ticket) {
@@ -242,7 +267,6 @@ function applyRoleRestrictions(ticket) {
   document.getElementById('tPriority').disabled = !isQA;
   document.getElementById('tSeverity').disabled = !isQA;
 
-  // Devs can modify assignee!
   document.getElementById('tAssignee').disabled = !(isQA || isDev);
 
   document.querySelector('.attach-actions').style.display = isQA ? 'flex' : 'none';
@@ -268,21 +292,44 @@ function closeModal(updateUrl = true) {
   }
 }
 
-function checkUrlForTicket() {
+async function checkUrlForTicket() {
   const params = new URLSearchParams(window.location.search);
   const ticketId = params.get('ticket');
-  if (ticketId && (!editingId || editingId !== ticketId)) {
-    const t = tickets.find(x => x.id === ticketId);
-    if (t) openModal(t, false);
+  if (!ticketId) return;
+
+  if (editingId === ticketId) return;
+
+  let t = tickets.find(x => x.id === ticketId);
+
+  if (!t) {
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}`, { headers: authHeaders });
+      if (res.ok) {
+        t = await res.json();
+
+        if (t.platform && t.platform !== currentPlatform) {
+          currentPlatform = t.platform;
+          document.querySelectorAll('#platformTabs button').forEach(b => {
+            b.classList.toggle('active', b.getAttribute('data-platform') === currentPlatform);
+          });
+          await loadDevs();
+          await loadTickets(true);
+          await loadStats();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load shared ticket:', err);
+    }
   }
+
+  if (t) openModal(t, false);
 }
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', async () => {
   const params = new URLSearchParams(window.location.search);
   const ticketId = params.get('ticket');
   if (ticketId) {
-    const t = tickets.find(x => x.id === ticketId);
-    if (t) openModal(t, false);
+    await checkUrlForTicket();
   } else {
     closeModal(false);
   }
@@ -343,20 +390,23 @@ form.onsubmit = async (e) => {
   loadTickets(true); loadStats();
 };
 
-// ---------- Auto-grow Title and Description for full view ----------
+// ---------- Auto-grow Inputs ----------
 const titleTextarea = document.getElementById('tTitle');
 function autoGrowTitle() {
+  if (!titleTextarea) return;
   titleTextarea.style.height = 'auto';
   titleTextarea.style.height = (titleTextarea.scrollHeight) + 'px';
 }
-titleTextarea.addEventListener('input', autoGrowTitle);
+if (titleTextarea) titleTextarea.addEventListener('input', autoGrowTitle);
 
 const descEl = document.getElementById('tDescription');
 function autoGrow() {
+  if (!descEl) return;
   descEl.style.height = 'auto';
   descEl.style.height = descEl.scrollHeight + 'px';
 }
-descEl.addEventListener('input', autoGrow);
+if (descEl) descEl.addEventListener('input', autoGrow);
+
 window.addEventListener('resize', () => { 
   if (overlay.classList.contains('open')) {
     autoGrow(); autoGrowTitle();
@@ -402,36 +452,26 @@ async function uploadFile(ticketId, file) {
 function attachItemEl(a, onRemove, pending) {
   const el = document.createElement('div');
   el.className = 'attach-item';
+  
   const src = a.previewUrl || a.url;
+
   if (a.type === 'image') {
     const link = document.createElement('a');
-    link.href = src; link.target = '_blank'; link.rel = 'noopener';
+    link.href = src; 
+    link.target = '_blank'; 
+    link.rel = 'noopener';
+
     const img = document.createElement('img');
-    img.src = src; img.alt = a.name || 'image';
-    link.appendChild(img); el.appendChild(link);
-  } else if (a.type === 'video') {
-    const v = document.createElement('video');
-    v.src = src; v.controls = true; v.preload = 'metadata';
-    el.appendChild(v);
-  } else {
-    const link = document.createElement('a');
-    link.className = 'link';
-    link.textContent = '🔗 ' + (a.name || a.url);
-    if (isHttpUrl(a.url)) { link.href = a.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    img.src = src; 
+    img.alt = a.name || 'image';
+    
+    img.onerror = () => {
+      img.alt = 'Failed to load image';
+      console.error('Failed to load image at:', src);
+    };
+
+    link.appendChild(img); 
     el.appendChild(link);
-  }
-  if (a.type !== 'link' && a.name) {
-    const f = document.createElement('div'); f.className = 'fname'; f.textContent = a.name; el.appendChild(f);
-  }
-  if (pending) {
-    const t = document.createElement('div'); t.className = 'pending-tag';
-    t.textContent = 'Will upload when you save'; el.appendChild(t);
-  }
-  if (user.role === 'QA') {
-    const rm = document.createElement('button');
-    rm.type = 'button'; rm.className = 'rm'; rm.title = 'Remove'; rm.textContent = '✕';
-    rm.onclick = onRemove;
-    el.appendChild(rm);
   }
   return el;
 }
@@ -584,6 +624,7 @@ async function postComment() {
     btn.disabled = false;
   }
 }
+
 document.getElementById('commentSendBtn').onclick = postComment;
 commentInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); postComment(); } });
 
@@ -597,14 +638,29 @@ document.getElementById('exportBtn').onclick = async () => {
   URL.revokeObjectURL(url);
 };
 
-// ---------- Auto Refresh Feature (Polling every 4 seconds) ----------
+let isUserInteracting = false;
+
+document.addEventListener('mouseover', e => {
+  if (e.target.closest('.column-body') || overlay.classList.contains('open')) {
+    isUserInteracting = true;
+  } else {
+    isUserInteracting = false;
+  }
+});
+
+document.addEventListener('mouseleave', () => {
+  isUserInteracting = false;
+});
+
+// ---------- Auto Refresh Feature (Silent refresh every 5 seconds) ----------
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(async () => {
-    // Only auto-refresh background data if modal is not active or actively being edited
-    await loadTickets(true);
-    await loadStats();
-  }, 4000);
+    if (!overlay.classList.contains('open') && !isUserInteracting) {
+      await loadTickets(true);
+      await loadStats();
+    }
+  }, 5000);
 }
 
 async function loadAll() {
@@ -615,4 +671,3 @@ async function loadAll() {
 }
 
 loadAll();
-

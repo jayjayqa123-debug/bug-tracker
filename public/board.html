@@ -20,6 +20,8 @@
     <button data-platform="Android" class="active">Android</button>
     <button data-platform="iOS">iOS</button>
     <button data-platform="Web">Web</button>
+    <button data-platform="77 Live Android">77 Live Android</button>
+    <button data-platform="77 Live iOS">77 Live iOS</button>
   </div>
   <div class="top-actions">
     <span class="who" id="whoAmI"></span>
@@ -30,7 +32,16 @@
   </div>
 </header>
 
-<div class="stats-bar" id="statsBar"></div>
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card"><div class="num" id="filedTodayCount">0</div><div class="label">FILED TODAY</div></div>
+  <div class="stat-card"><div class="num" id="fixedTodayCount">0</div><div class="label">FIXED TODAY</div></div>
+  <div class="stat-card"><div class="num" id="totalFixedCount">0</div><div class="label">TOTAL FIXED</div></div>
+  <div class="stat-card"><div class="num" id="stillActiveCount">0</div><div class="label">STILL ACTIVE</div></div>
+  <div class="stat-card"><div class="num" id="reactiveCount">0</div><div class="label">RE-ACTIVE</div></div>
+  <div class="stat-card"><div class="num" id="closedTodayCount">0</div><div class="label">CLOSED TODAY</div></div>
+  <div class="stat-card"><div class="num" id="pendingRegressionCount">0</div><div class="label">PENDING REGRESSION</div></div>
+  <div class="stat-card"><div class="num" id="totalCount">0</div><div class="label">TOTAL</div></div>
+</div>
 
 <div class="board" id="board"></div>
 

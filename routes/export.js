@@ -18,15 +18,68 @@ async function countWhere(platform, extraCondition, extraParams = []) {
 router.get('/stats', authRequired, async (req, res) => {
   try {
     const platform = req.query.platform || null;
-    const [filedToday, fixedToday, stillActive, closedToday, pendingRegression, total] = await Promise.all([
+
+    const [
+      filedToday,
+      fixedToday,
+      fixedYesterday,
+      totalFixed,
+      stillActive,
+      reactive, // <--- Corrected below
+      closedToday,
+      pendingRegression,
+      androidCount,
+      iosCount,
+      live77Count,
+      ios77Count,
+      total,
+      totalOverall
+    ] = await Promise.all([
       countWhere(platform, 'DATE(created_at) = CURDATE()'),
       countWhere(platform, 'DATE(fixed_at) = CURDATE()'),
-      countWhere(platform, "status != 'Closed'"),
+      countWhere(platform, 'DATE(fixed_at) = CURDATE() - INTERVAL 1 DAY'),
+      
+      // Fixed condition grouping with parentheses to preserve platform scope
+      countWhere(platform, "(status IN ('Fixed', 'Resolved') OR fixed_at IS NOT NULL)"),
+      
+      // FIXED STILL ACTIVE: Excludes Closed, Complete (For Retest), and Fixed tickets
+      countWhere(platform, "status NOT IN ('Closed', 'Complete (For Retest)', 'Fixed', 'Resolved', 'WONTFIX', 'Duplicate')"),
+      
+      // UPDATED HERE: Added 'Reactive' to match board.js ALL_STATUSES
+      countWhere(platform, "status IN ('Reactive', 'Re-active', 'Reopened', 'Re-opened')"),
+
       countWhere(platform, 'DATE(closed_at) = CURDATE()'),
       countWhere(platform, "status = 'Complete (For Retest)'"),
-      countWhere(platform, null)
+      
+      // Specific platform counts
+      countWhere('Android', null),
+      countWhere('iOS', null),
+      countWhere('77 Live', null),
+      countWhere('77 Live iOS', null),
+
+      // Total for selected platform filter
+      countWhere(platform, null),
+
+      // Total overall across all platforms (explicitly passes null platform)
+      countWhere(null, null)
     ]);
-    res.json({ filedToday, fixedToday, stillActive, closedToday, pendingRegression, total });
+
+    res.json({
+      filedToday,
+      fixedToday,
+      fixedYesterday,
+      totalFixed,
+      stillActive,
+      reactive,
+      closedToday,
+      pendingRegression,
+      androidCount,
+      iosCount,
+      live77Count,
+      ios77Count,
+      total,
+      totalOverall
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error loading stats' });
