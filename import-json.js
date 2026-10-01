@@ -28,11 +28,19 @@ const STATUS_MAP = {
   'Closed': 'Closed'
 };
 
+// Map file name to exact backend allowed platforms: 'Android', 'iOS', or 'Web'
 function getStrictPlatform(fileName) {
   const lower = fileName.toLowerCase();
-  if (lower.includes('ios')) return '77 Live Android';
-  if (lower.includes('web')) return '77 Live IOS';
+
+  // Handle 77 Live specific files
+  if (lower.includes('ios-77') || lower.includes('77-ios')) return '77 Live iOS';
+  if (lower.includes('android-77') || lower.includes('77-android')) return '77 Live Android';
+
+  // Standard platform fallbacks
+  if (lower.includes('ios')) return '77 Live iOS';
   if (lower.includes('android')) return 'Android';
+  if (lower.includes('web')) return 'Web';
+
   return 'iOS';
 }
 
