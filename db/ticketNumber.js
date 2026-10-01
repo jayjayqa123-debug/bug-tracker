@@ -1,6 +1,4 @@
 // Generates ticket numbers like AND-0001, IOS-0001, WEB-0001, 77AND-0001, 77IOS-0001.
-// Each platform has its own counter row, updated atomically so two QA members
-// filing at the same moment can never get the same number.
 const pool = require('./pool');
 
 const PREFIX = {
@@ -17,12 +15,25 @@ function format(platform, n) {
 }
 
 async function nextNumber(platform) {
-  const conn = await pool.getConnection(); // LAST_INSERT_ID() is per-connection
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
+    // Ensure counter row exists
     await conn.execute('INSERT IGNORE INTO counters (platform, last_number) VALUES (?, 0)', [platform]);
-    await conn.execute('UPDATE counters SET last_number = LAST_INSERT_ID(last_number + 1) WHERE platform = ?', [platform]);
-    const [[row]] = await conn.query('SELECT LAST_INSERT_ID() AS n');
-    return format(platform, Number(row.n));
+
+    // Lock the counter row and fetch the current value safely
+    const [rows] = await conn.execute('SELECT last_number FROM counters WHERE platform = ? FOR UPDATE', [platform]);
+    const nextVal = (rows[0] ? Number(rows[0].last_number) : 0) + 1;
+
+    // Update the counter
+    await conn.execute('UPDATE counters SET last_number = ? WHERE platform = ?', [nextVal, platform]);
+
+    await conn.commit();
+    return format(platform, nextVal);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
   } finally {
     conn.release();
   }
@@ -31,7 +42,8 @@ async function nextNumber(platform) {
 // Preview only (does not reserve the number)
 async function peekNumber(platform) {
   const [rows] = await pool.execute('SELECT last_number FROM counters WHERE platform = ?', [platform]);
-  return format(platform, (rows[0] ? Number(rows[0].last_number) : 0) + 1);
+  const lastNum = rows[0] ? Number(rows[0].last_number) : 0;
+  return format(platform, lastNum + 1);
 }
 
 module.exports = { nextNumber, peekNumber, PREFIX };
