@@ -58,6 +58,7 @@ document.getElementById('platformTabs').addEventListener('click', (e) => {
   btn.classList.add('active');
 
   currentPlatform = btn.getAttribute('data-platform');
+  loadDevs();
   loadTickets();
   loadStats();
 });
@@ -68,10 +69,21 @@ function visibleStatuses() {
 }
 
 async function loadDevs() {
-  const res = await fetch(`/api/tickets/devs?platform=${currentPlatform}`, { headers: authHeaders });
+  // Load developers from every platform, not just the current tab
+  const res = await fetch('/api/tickets/devs', { headers: authHeaders });
   devs = await res.json();
   const sel = document.getElementById('tAssignee');
-  sel.innerHTML = '<option value="">Unassigned</option>' + devs.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+
+  // Group by platform, with the current platform's team listed first
+  const platforms = [...new Set(devs.map(d => d.platform || 'Other'))]
+    .sort((a, b) => (b === currentPlatform) - (a === currentPlatform) || a.localeCompare(b));
+  sel.innerHTML = '<option value="">Unassigned</option>' + platforms.map(p => {
+    const members = devs.filter(d => (d.platform || 'Other') === p)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return `<optgroup label="${escapeHtml(p)}">` +
+      members.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('') +
+      '</optgroup>';
+  }).join('');
 }
 
 async function loadStats() {
@@ -452,26 +464,37 @@ async function uploadFile(ticketId, file) {
 function attachItemEl(a, onRemove, pending) {
   const el = document.createElement('div');
   el.className = 'attach-item';
-  
   const src = a.previewUrl || a.url;
-
   if (a.type === 'image') {
     const link = document.createElement('a');
-    link.href = src; 
-    link.target = '_blank'; 
-    link.rel = 'noopener';
-
+    link.href = src; link.target = '_blank'; link.rel = 'noopener';
     const img = document.createElement('img');
-    img.src = src; 
-    img.alt = a.name || 'image';
-    
-    img.onerror = () => {
-      img.alt = 'Failed to load image';
-      console.error('Failed to load image at:', src);
-    };
-
-    link.appendChild(img); 
+    img.src = src; img.alt = a.name || 'image';
+    img.onerror = () => { img.alt = 'Failed to load image'; };
+    link.appendChild(img); el.appendChild(link);
+  } else if (a.type === 'video') {
+    const v = document.createElement('video');
+    v.src = src; v.controls = true; v.preload = 'metadata';
+    el.appendChild(v);
+  } else {
+    const link = document.createElement('a');
+    link.className = 'link';
+    link.textContent = '🔗 ' + (a.name || a.url);
+    if (isHttpUrl(a.url)) { link.href = a.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; }
     el.appendChild(link);
+  }
+  if (a.type !== 'link' && a.name) {
+    const f = document.createElement('div'); f.className = 'fname'; f.textContent = a.name; el.appendChild(f);
+  }
+  if (pending) {
+    const t = document.createElement('div'); t.className = 'pending-tag';
+    t.textContent = 'Will upload when you save'; el.appendChild(t);
+  }
+  if (user.role === 'QA') {
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'rm'; rm.title = 'Remove'; rm.textContent = '✕';
+    rm.onclick = onRemove;
+    el.appendChild(rm);
   }
   return el;
 }

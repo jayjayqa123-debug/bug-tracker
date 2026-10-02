@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) DEFAULT NULL,
   google_id VARCHAR(64) DEFAULT NULL,
   role ENUM('QA','Dev') NOT NULL,
-  platform ENUM('Android','iOS','Web') DEFAULT NULL,
+  platform ENUM('Android','iOS','Web','77 Live Android','77 Live iOS') DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY email (email),
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_number VARCHAR(20) DEFAULT NULL,
   title VARCHAR(500) NOT NULL,
   description TEXT DEFAULT NULL,
-  platform ENUM('Android','iOS','Web') NOT NULL,
+  platform ENUM('Android','iOS','Web','77 Live Android','77 Live iOS') NOT NULL,
   status VARCHAR(50) NOT NULL DEFAULT 'On Filing',
   priority VARCHAR(20) NOT NULL DEFAULT 'Medium',
   severity VARCHAR(20) NOT NULL DEFAULT 'Minor',
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE IF NOT EXISTS counters (
-  platform ENUM('Android','iOS','Web') NOT NULL,
+  platform ENUM('Android','iOS','Web','77 Live Android','77 Live iOS') NOT NULL,
   last_number INT NOT NULL DEFAULT 0,
   PRIMARY KEY (platform)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -96,7 +96,9 @@ CREATE TABLE IF NOT EXISTS counters (
 INSERT IGNORE INTO counters (platform, last_number) VALUES
 ('Android', 0),
 ('iOS', 0),
-('Web', 0);
+('Web', 0),
+('77 Live Android', 0),
+('77 Live iOS', 0);
 
 -- legacy bug tables: bugs must come before bug_attachments and bug_history
 CREATE TABLE IF NOT EXISTS bugs (

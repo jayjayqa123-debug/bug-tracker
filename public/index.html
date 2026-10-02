@@ -17,6 +17,12 @@
       <button class="tab-btn" id="tabRegister" type="button">Register</button>
     </div>
 
+    <!-- Google sign-in (shown only when configured) -->
+    <div id="googleArea" style="display: none;">
+      <div id="googleBtn" style="display:flex;justify-content:center;"></div>
+      <div class="divider"><span>or use email</span></div>
+    </div>
+
     <!-- Login Form -->
     <form id="loginForm">
       <div id="loginMsg" class="msg"></div>
@@ -62,6 +68,8 @@
           <option value="Android">Android</option>
           <option value="iOS">iOS</option>
           <option value="Web">Web</option>
+          <option value="77 Live Android">77 Live Android</option>
+          <option value="77 Live iOS">77 Live iOS</option>
         </select>
       </div>
       <button type="submit" class="btn-primary">Create Account</button>
@@ -120,17 +128,16 @@
           <option value="Android">Android</option>
           <option value="iOS">iOS</option>
           <option value="Web">Web</option>
+          <option value="77 Live Android">77 Live Android</option>
+          <option value="77 Live iOS">77 Live iOS</option>
         </select>
       </div>
       <button type="submit" class="btn-primary">Complete Setup</button>
     </form>
 
-    <!-- Google OAuth Button Wrapper -->
-    <div id="googleArea" style="display: none;">
-      <div id="googleBtn"></div>
-    </div>
   </div>
 
+  <script src="js/pwtoggle.js"></script>
   <script src="js/auth.js"></script>
 </body>
 </html>

@@ -124,10 +124,10 @@ router.post('/', authRequired, async (req, res) => {
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [id]);
     rows[0].attachments = [];
     res.json(rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error filing ticket' });
-  }
+    } catch (err) {
+      console.error('Error filing ticket:', err.message, err.sqlMessage || '');
+      res.status(500).json({ error: 'Server error filing ticket' });
+    }
 });
 
 // Edit ticket fields: QA can edit everything; Devs can edit assignee_id

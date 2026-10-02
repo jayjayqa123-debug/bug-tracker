@@ -36,7 +36,7 @@
           <p><strong>Description:</strong></p>
           <div class="share-desc">${escapeHtml(t.description || 'No description provided.')}</div>
           ${attachmentsHtml(t.attachments)}
-          <p style="color:#93a4b8;font-size:12px;">Created: ${new Date(t.created_at).toLocaleString()}</p>
+          <p style="color:#64748b;font-size:12px;">Created: ${new Date(t.created_at).toLocaleString()}</p>
         `;
       } catch (e) {
         content.textContent = 'Could not load ticket.';

@@ -34,20 +34,14 @@
     <input type="text" id="searchInput" placeholder="Search bugs by key or title…">
     <select id="statusFilter"><option value="">All Statuses</option></select>
     <select id="priorityFilter"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select>
+    <select id="assigneeFilter"><option value="">All Assignees</option></select>
+    <span class="count" id="countLabel" style="margin-left:auto;color:var(--text-muted);align-self:center;"></span>
   </div>
 
   <div class="table-card">
     <table class="bug-table">
       <thead>
-        <tr>
-          <th>Key</th>
-          <th>Title</th>
-          <th>Status</th>
-          <th>Priority</th>
-          <th>Severity</th>
-          <th>Assignee</th>
-          <th>Filed By</th>
-        </tr>
+        <tr id="headRow"></tr>
       </thead>
       <tbody id="bugTableBody"></tbody>
     </table>
@@ -60,29 +54,42 @@ const user = JSON.parse(localStorage.getItem('user') || 'null');
 if (!token || !user) window.location.href = 'index.html';
 const authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 
-let currentPlatform = 'Android';
+const COLS = [
+  ['ticket_number', 'Key'], ['title', 'Title'], ['status', 'Status'], ['priority', 'Priority'],
+  ['severity', 'Severity'], ['assignee', 'Assignee'], ['filed_by_name', 'Filed By'], ['created_at', 'Created']
+];
+
+let currentPlatform = localStorage.getItem('listPlatform') || 'Android';
 let tickets = [];
 let devs = [];
+let sortKey = 'created_at', sortDir = -1;
 
-document.getElementById('whoAmI').textContent = `${user.name} (${user.role})`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.getElementById('whoAmI').textContent = user ? `${user.name} (${user.role})` : '';
 document.getElementById('logoutBtn').onclick = () => { localStorage.clear(); window.location.href = 'index.html'; };
 
-document.querySelectorAll('#platformTabs button').forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll('#platformTabs button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentPlatform = btn.dataset.platform;
+// Platform tabs (remember the last one used)
+document.querySelectorAll('#platformTabs button').forEach(b => {
+  b.classList.toggle('active', b.dataset.platform === currentPlatform);
+  b.onclick = () => {
+    document.querySelectorAll('#platformTabs button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    currentPlatform = b.dataset.platform;
+    localStorage.setItem('listPlatform', currentPlatform);
     loadData();
   };
 });
 
 async function loadData() {
   const [dRes, tRes] = await Promise.all([
-    fetch(`/api/tickets/devs?platform=${currentPlatform}`, { headers: authHeaders }),
-    fetch(`/api/tickets?platform=${currentPlatform}`, { headers: authHeaders })
+    fetch('/api/tickets/devs', { headers: authHeaders }),
+    fetch(`/api/tickets?platform=${encodeURIComponent(currentPlatform)}`, { headers: authHeaders })
   ]);
+  if (tRes.status === 401 || tRes.status === 403) { localStorage.clear(); window.location.href = 'index.html'; return; }
   devs = await dRes.json();
-  tickets = await tRes.json();
+  tickets = (await tRes.json()).map(t => ({ ...t, assignee: assigneeName(t.assignee_id) }));
+  fillAssignees();
   renderTable();
 }
 
@@ -91,41 +98,64 @@ function assigneeName(id) {
   return d ? d.name : 'Unassigned';
 }
 
+function fillAssignees() {
+  const sel = document.getElementById('assigneeFilter'), cur = sel.value;
+  const names = [...new Set(tickets.map(t => t.assignee))].sort();
+  sel.innerHTML = '<option value="">All Assignees</option>' + names.map(n => `<option>${esc(n)}</option>`).join('');
+  sel.value = names.includes(cur) ? cur : '';
+}
+
+function fmtDate(v) {
+  const d = new Date(v);
+  return isNaN(d) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 function renderTable() {
   const search = document.getElementById('searchInput').value.toLowerCase();
   const status = document.getElementById('statusFilter').value;
   const prio = document.getElementById('priorityFilter').value;
+  const assignee = document.getElementById('assigneeFilter').value;
 
-  const filtered = tickets.filter(t => {
-    const matchSearch = (t.ticket_number || '').toLowerCase().includes(search) || t.title.toLowerCase().includes(search);
-    const matchStatus = !status || t.status === status;
-    const matchPrio = !prio || t.priority === prio;
-    return matchSearch && matchStatus && matchPrio;
-  });
+  const filtered = tickets.filter(t =>
+    ((t.ticket_number || '').toLowerCase().includes(search) || (t.title || '').toLowerCase().includes(search) ||
+      (t.assignee || '').toLowerCase().includes(search) || (t.filed_by_name || '').toLowerCase().includes(search)) &&
+    (!status || t.status === status) && (!prio || t.priority === prio) && (!assignee || t.assignee === assignee));
 
-  const tbody = document.getElementById('bugTableBody');
-  tbody.innerHTML = filtered.map(t => `
-    <tr onclick="window.location.href='board.html?ticket=${t.id}'">
-      <td class="tno">${t.ticket_number}</td>
-      <td><strong>${t.title}</strong></td>
-      <td><span class="pill info">${t.status}</span></td>
-      <td><span class="badge prio-${t.priority}">${t.priority}</span></td>
-      <td><span class="badge sev-${t.severity}">${t.severity}</span></td>
-      <td>${assigneeName(t.assignee_id)}</td>
-      <td>${t.filed_by_name || ''}</td>
-    </tr>
-  `).join('');
+  filtered.sort((a, b) =>
+    String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? ''), undefined, { numeric: true }) * sortDir);
+
+  document.getElementById('headRow').innerHTML = COLS.map(([k, l]) =>
+    `<th class="sortable ${k === sortKey ? 'sorted' + (sortDir < 0 ? ' desc' : '') : ''}" data-k="${k}">${l}</th>`).join('');
+
+  document.getElementById('bugTableBody').innerHTML = filtered.length ? filtered.map(t => `
+    <tr onclick="window.location.href='board.html?ticket=${encodeURIComponent(t.id)}'" style="cursor:pointer;">
+      <td class="tno">${esc(t.ticket_number)}</td>
+      <td><strong>${esc(t.title)}</strong></td>
+      <td><span class="pill info">${esc(t.status)}</span></td>
+      <td><span class="badge prio-${esc(t.priority)}">${esc(t.priority)}</span></td>
+      <td><span class="badge sev-${esc(t.severity)}">${esc(t.severity)}</span></td>
+      <td>${esc(t.assignee)}</td>
+      <td>${esc(t.filed_by_name)}</td>
+      <td>${esc(fmtDate(t.created_at))}</td>
+    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No bugs match these filters.</td></tr>`;
+
+  document.getElementById('countLabel').textContent = `${filtered.length} of ${tickets.length} bugs`;
 }
 
-document.getElementById('searchInput').oninput = renderTable;
-document.getElementById('statusFilter').onchange = renderTable;
-document.getElementById('priorityFilter').onchange = renderTable;
+document.getElementById('headRow').addEventListener('click', e => {
+  const th = e.target.closest('th'); if (!th) return;
+  sortDir = th.dataset.k === sortKey ? -sortDir : 1;
+  sortKey = th.dataset.k;
+  renderTable();
+});
+['searchInput', 'statusFilter', 'priorityFilter', 'assigneeFilter'].forEach(id =>
+  document.getElementById(id).addEventListener('input', renderTable));
 
 fetch('/api/tickets/statuses', { headers: authHeaders })
   .then(r => r.json())
   .then(list => {
-    const sel = document.getElementById('statusFilter');
-    sel.innerHTML = '<option value="">All Statuses</option>' + list.map(s => `<option value="${s}">${s}</option>`).join('');
+    document.getElementById('statusFilter').innerHTML =
+      '<option value="">All Statuses</option>' + list.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   });
 
 loadData();

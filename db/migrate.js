@@ -35,7 +35,7 @@ async function migrate() {
 
   // 2) Upgrade tables that were created by an older version of the app
   if (!(await columnInfo('users', 'platform'))) {
-    await pool.query("ALTER TABLE users ADD COLUMN platform ENUM('Android','iOS','Web') NULL AFTER role");
+    await pool.query("ALTER TABLE users ADD COLUMN platform ENUM('Android','iOS','Web','77 Live Android','77 Live iOS') NULL AFTER role");
   }
   if (!(await columnInfo('users', 'google_id'))) {
     await pool.query('ALTER TABLE users ADD COLUMN google_id VARCHAR(64) NULL UNIQUE AFTER password');
@@ -66,6 +66,34 @@ async function migrate() {
     KEY idx_comment_ticket (ticket_id, created_at),
     CONSTRAINT fk_comment_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+
+  // Widen platform columns on older databases so the 77 Live platforms are accepted
+  const PLATFORM_ENUM = "ENUM('Android','iOS','Web','77 Live Android','77 Live iOS')";
+  for (const [table, nullable] of [['users', 'NULL'], ['tickets', 'NOT NULL']]) {
+    const [[col]] = await pool.execute(
+      `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'platform'`, [table]);
+    if (col && !String(col.COLUMN_TYPE).includes('77 Live')) {
+      await pool.query(`ALTER TABLE ${table} MODIFY platform ${PLATFORM_ENUM} ${nullable}`);
+    }
+  }
+
+  // counters.platform is the PRIMARY KEY, and some MySQL-compatible databases (e.g. TiDB)
+  // refuse to MODIFY a primary-key column. So rebuild this small table instead.
+  const [[cc]] = await pool.execute(
+    `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'counters' AND COLUMN_NAME = 'platform'`);
+  if (cc && !String(cc.COLUMN_TYPE).includes('77 Live')) {
+    await pool.query('DROP TABLE IF EXISTS counters_new');
+    await pool.query(`CREATE TABLE counters_new (
+      platform ${PLATFORM_ENUM} NOT NULL,
+      last_number INT NOT NULL DEFAULT 0,
+      PRIMARY KEY (platform)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
+    await pool.query('INSERT INTO counters_new (platform, last_number) SELECT platform, last_number FROM counters');
+    await pool.query('DROP TABLE counters');
+    await pool.query('RENAME TABLE counters_new TO counters');
+  }
 
   // 3) Make sure every platform has a counter, then number any old tickets
   for (const p of Object.keys(PREFIX)) {
