@@ -888,3 +888,33 @@ table.users tr.requested { background: #fef3c7; }
 .card { box-shadow: 0 1px 3px rgba(30, 41, 59, 0.12); }
 .card .meta.created { justify-content: flex-start; margin-top: 4px; font-size: 11px; opacity: 0.9; }
 header.topbar { box-shadow: 0 1px 4px rgba(30, 41, 59, 0.1); }
+
+
+select,
+.modal select,
+.field select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 16px !important;
+  padding-right: 38px !important;
+}
+
+select,
+form select,
+.modal select,
+.field select,
+.form-group select,
+.auth-card select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 16px !important;
+  padding-right: 38px !important;
+}
