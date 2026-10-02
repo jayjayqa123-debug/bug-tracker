@@ -77,6 +77,37 @@ function isTemplateCard(cardName = '') {
   );
 }
 
+// -------------------------------------------------------------
+// PRE-CLEANUP FUNCTION
+// Deletes previously imported & template tickets before import
+// -------------------------------------------------------------
+// async function clearImportedTickets(authHeaders) {
+//   console.log('🧹 Cleaning up old imported tickets & template entries...');
+//   try {
+//     const res = await axios.get(`${RENDER_APP_URL}/api/tickets`, { headers: authHeaders });
+//     const tickets = res.data || [];
+
+//     // Identify tickets that came from Trello imports or match template titles
+//     const toDelete = tickets.filter(t => 
+//       (t.description && t.description.includes('Imported from')) ||
+//       isTemplateCard(t.title)
+//     );
+
+//     console.log(`Found ${toDelete.length} old/template tickets to remove.\n`);
+
+//     for (const ticket of toDelete) {
+//       try {
+//         await axios.delete(`${RENDER_APP_URL}/api/tickets/${ticket.id}`, { headers: authHeaders });
+//         console.log(` 🗑 Deleted: "${ticket.title}" (ID: ${ticket.id})`);
+//       } catch (delErr) {
+//         console.warn(` ⚠ Failed to delete ticket ID ${ticket.id}:`, delErr.message);
+//       }
+//     }
+//     console.log('\n✅ Pre-cleanup completed successfully!\n');
+//   } catch (err) {
+//     console.warn('⚠ Pre-cleanup error:', err.message);
+//   }
+// }
 
 // -------------------------------------------------------------
 // MIGRATION SCRIPT

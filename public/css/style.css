@@ -153,6 +153,7 @@ header.topbar {
 }
 .column-body { padding: 12px; overflow-y: auto; flex: 1; min-height: 80px; }
 .column-body.dragover { background: #b9d2f5; border-radius: 0 0 10px 10px; }
+.column-body.dragover { background: #dbeafe; border-radius: 0 0 10px 10px; }
 
 
 /* ---- Cards ---- */
@@ -313,6 +314,7 @@ header.topbar {
 .comment-empty { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
 .comment { background: var(--panel-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
 .comment.mine { border-color: #3b82f6; background: #d3e2f8; }
+.comment.mine { border-color: #3b82f6; background: #e8f0fe; }
 .comment-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; flex-wrap: wrap; }
 .comment-time { color: var(--text-muted); font-size: 11px; margin-left: auto; }
 .comment-del { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0 2px; }

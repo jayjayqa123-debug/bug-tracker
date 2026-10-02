@@ -84,6 +84,7 @@ async function migrate() {
     `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'counters' AND COLUMN_NAME = 'platform'`);
   if (cc && !String(cc.COLUMN_TYPE).includes('77 Live')) {
+    await pool.query('DROP TABLE IF EXISTS counters_new');
     await pool.query(`CREATE TABLE counters_new (
       platform ${PLATFORM_ENUM} NOT NULL,
       last_number INT NOT NULL DEFAULT 0,
@@ -92,6 +93,8 @@ async function migrate() {
     await pool.query('INSERT INTO counters_new (platform, last_number) SELECT platform, last_number FROM counters');
     // Keep the old table as a safety copy instead of dropping it
     await pool.query('RENAME TABLE counters TO counters_old_backup, counters_new TO counters');
+    await pool.query('DROP TABLE counters');
+    await pool.query('RENAME TABLE counters_new TO counters');
   }
 
   // 3) Make sure every platform has a counter, then number any old tickets
