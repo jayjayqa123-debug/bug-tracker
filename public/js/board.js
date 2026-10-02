@@ -34,11 +34,31 @@ let autoRefreshTimer = null;
     const fresh = await res.json();
     localStorage.setItem('user', JSON.stringify(fresh));
     if (fresh.mustChangePassword) { window.location.href = 'index.html'; return; }
-    if (fresh.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+    if (fresh.isAdmin) { document.getElementById('adminBtn').style.display = 'inline-block'; document.getElementById('backupBtn').style.display = 'inline-block'; }
   } catch (e) {}
 })();
 
-if (user && user.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+if (user && user.isAdmin) { document.getElementById('adminBtn').style.display = 'inline-block'; document.getElementById('backupBtn').style.display = 'inline-block'; }
+document.getElementById('backupBtn').onclick = async () => {
+  const btn = document.getElementById('backupBtn');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Backing up...';
+  try {
+    const res = await fetch('/api/admin/backup', { headers: authHeaders });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Backup failed');
+    const blob = await res.blob();
+    const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : 'bug-tracker-backup.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) {
+    alert('Could not create backup: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+};
 document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
 
 document.getElementById('whoAmI').textContent = `${user.name} (${user.role})`;
@@ -165,6 +185,19 @@ function assigneeName(id) {
   return d ? escapeHtml(d.name) : 'Unassigned';
 }
 
+function parseDbDate(v) {
+  const d = new Date(String(v || '').replace(' ', 'T'));
+  return isNaN(d) ? null : d;
+}
+function shortDate(v) {
+  const d = parseDbDate(v);
+  return d ? d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+}
+function fullDate(v) {
+  const d = parseDbDate(v);
+  return d ? d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+}
+
 function renderCard(t) {
   const card = document.createElement('div');
   card.className = 'card';
@@ -183,6 +216,7 @@ function renderCard(t) {
       <button class="share-btn" data-token="${t.share_token}">🔗 Share</button>
     </div>
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
+    <div class="meta created" title="${escapeHtml(fullDate(t.created_at))}"><span>🗓 Created ${escapeHtml(shortDate(t.created_at))}</span></div>
   `;
 
   card.querySelector('.share-btn').onclick = async (e) => {

@@ -91,6 +91,8 @@ async function migrate() {
       PRIMARY KEY (platform)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
     await pool.query('INSERT INTO counters_new (platform, last_number) SELECT platform, last_number FROM counters');
+    // Keep the old table as a safety copy instead of dropping it
+    await pool.query('RENAME TABLE counters TO counters_old_backup, counters_new TO counters');
     await pool.query('DROP TABLE counters');
     await pool.query('RENAME TABLE counters_new TO counters');
   }

@@ -1,20 +1,20 @@
 :root {
-  /* Light theme */
-  --bg: #f1f5f9;
-  --panel: #ffffff;
-  --panel-card: #ffffff;
-  --border: #d5dde8;
+  /* Soft blue-lavender theme (no plain white) */
+  --bg: #cddcf0;
+  --panel: #dde7f5;
+  --panel-card: #ecf2fb;
+  --border: #aebfd8;
   --border-focus: #3b82f6;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
-  --text: #1f2937;
-  --text-muted: #64748b;
+  --text: #1e293b;
+  --text-muted: #51627a;
   --heading: #0f172a;
 
-  --surface-2: #e6edf5;
-  --surface-3: #d3deea;
-  --surface-hover: #eef4fb;
-  --surface-disabled: #eef1f5;
+  --surface-2: #c6d6ec;
+  --surface-3: #b3c7e2;
+  --surface-hover: #d3e0f2;
+  --surface-disabled: #d3dce9;
   --warn-text: #b45309;
 
   --low: #4ade80;
@@ -32,6 +32,7 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background: var(--bg);
+  background: linear-gradient(135deg, #c9dbf2 0%, #d9d3f1 55%, #cfe3ee 100%) fixed;
   color: var(--text);
   line-height: 1.5;
 }
@@ -151,6 +152,7 @@ header.topbar {
   color: var(--text-muted);
 }
 .column-body { padding: 12px; overflow-y: auto; flex: 1; min-height: 80px; }
+.column-body.dragover { background: #b9d2f5; border-radius: 0 0 10px 10px; }
 .column-body.dragover { background: #dbeafe; border-radius: 0 0 10px 10px; }
 
 
@@ -311,6 +313,7 @@ header.topbar {
 .comment-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; padding-right: 4px; }
 .comment-empty { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
 .comment { background: var(--panel-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.comment.mine { border-color: #3b82f6; background: #d3e2f8; }
 .comment.mine { border-color: #3b82f6; background: #e8f0fe; }
 .comment-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; flex-wrap: wrap; }
 .comment-time { color: var(--text-muted); font-size: 11px; margin-left: auto; }
@@ -424,7 +427,7 @@ body.auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  background: linear-gradient(135deg, #c9dbf2 0%, #d9d3f1 55%, #cfe3ee 100%) fixed;
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -872,10 +875,16 @@ table.users tr:hover {
 table.users tr.requested { background: #fef3c7; }
 .pill { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: var(--surface-2); color: var(--text); }
 .pill.warn { background: var(--medium); color: #111; }
-.pill.info { background: #dbeafe; }
+.pill.info { background: #b9d2f5; }
 .btn-small { padding: 6px 10px; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; font-size: 12px; }
 .btn-small:disabled { background: var(--surface-2); color: var(--text-muted); cursor: not-allowed; }
 .tno { color: var(--accent); font-weight: 700; white-space: nowrap; }
 .bug-table th.sortable { cursor: pointer; user-select: none; }
 .bug-table th.sorted::after { content: " \25B2"; font-size: 10px; }
 .bug-table th.sorted.desc::after { content: " \25BC"; }
+
+
+/* ---- Card created-date line + card depth ---- */
+.card { box-shadow: 0 1px 3px rgba(30, 41, 59, 0.12); }
+.card .meta.created { justify-content: flex-start; margin-top: 4px; font-size: 11px; opacity: 0.9; }
+header.topbar { box-shadow: 0 1px 4px rgba(30, 41, 59, 0.1); }

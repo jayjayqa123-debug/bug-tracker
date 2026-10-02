@@ -57,4 +57,32 @@ router.post('/users/:id/reset-password', async (req, res) => {
   }
 });
 
+// Read-only backup of every filed ticket (plus comments, attachment records, counters and the user
+// list WITHOUT passwords). Sent to the admin's browser as a download - nothing is stored on the server
+// and nothing is changed or deleted.
+router.get('/backup', async (req, res) => {
+  try {
+    const [tickets] = await pool.query('SELECT * FROM tickets ORDER BY created_at');
+    const [comments] = await pool.query('SELECT * FROM ticket_comments ORDER BY created_at');
+    const [attachments] = await pool.query('SELECT * FROM attachments ORDER BY created_at');
+    const [counters] = await pool.query('SELECT * FROM counters');
+    const [users] = await pool.query('SELECT id, name, email, role, platform, created_at FROM users');
+
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    const name = `bug-tracker-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`;
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(JSON.stringify({
+      backed_up_at: d.toISOString(),
+      backed_up_by: req.user.email,
+      counts: { tickets: tickets.length, comments: comments.length, attachments: attachments.length },
+      tickets, comments, attachments, counters, users
+    }, null, 2));
+  } catch (err) {
+    console.error('Backup error:', err.message);
+    res.status(500).json({ error: 'Could not create the backup' });
+  }
+});
+
 module.exports = router;

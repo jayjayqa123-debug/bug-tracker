@@ -123,10 +123,7 @@ async function importAllBoards() {
     const authHeaders = { Authorization: `Bearer ${loginRes.data.token}` };
     console.log('Authentication successful!\n');
 
-    // 1. Automatically wipe old imported/template data
-    await clearImportedTickets(authHeaders);
-
-    // 2. Loop through and import fresh data
+    // Import data (nothing is deleted)
     for (const fileName of JSON_FILES) {
       const filePath = path.join(__dirname, fileName);
 

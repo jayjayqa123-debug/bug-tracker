@@ -3,3 +3,7 @@ node_modules/
 .env.*
 !.env.example
 uploads/*
+backups/
+
+backup.js
+sync-trello.js
