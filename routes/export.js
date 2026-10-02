@@ -25,7 +25,7 @@ router.get('/stats', authRequired, async (req, res) => {
       fixedYesterday,
       totalFixed,
       stillActive,
-      reactive, // <--- Corrected below
+      reactive, 
       closedToday,
       pendingRegression,
       androidCount,
@@ -54,7 +54,7 @@ router.get('/stats', authRequired, async (req, res) => {
       // Specific platform counts
       countWhere('Android', null),
       countWhere('iOS', null),
-      countWhere('77 Live', null),
+      countWhere('77 Live Android', null),
       countWhere('77 Live iOS', null),
 
       // Total for selected platform filter

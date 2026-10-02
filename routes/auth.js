@@ -8,14 +8,14 @@ const { SECRET, authRequired, isAdminUser } = require('../middleware/auth');
 
 const router = express.Router();
 
-const PLATFORMS = ['Android', 'iOS', 'Web'];
+const PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live iOS'];
 
 // Validates role/platform. Returns { error } or { role, platform }.
 function checkProfile(role, platform) {
   if (!['QA', 'Dev'].includes(role)) return { error: 'Role must be QA or Dev' };
   if (role === 'Dev') {
     if (!PLATFORMS.includes(platform)) {
-      return { error: 'Developers must select a platform: Android, iOS, or Web' };
+      return { error: 'Developers must select a platform: Android, iOS, Web, 77 Live Android, or 77 Live iOS' };
     }
     return { role, platform };
   }

@@ -34,11 +34,31 @@ let autoRefreshTimer = null;
     const fresh = await res.json();
     localStorage.setItem('user', JSON.stringify(fresh));
     if (fresh.mustChangePassword) { window.location.href = 'index.html'; return; }
-    if (fresh.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+    if (fresh.isAdmin) { document.getElementById('adminBtn').style.display = 'inline-block'; document.getElementById('backupBtn').style.display = 'inline-block'; }
   } catch (e) {}
 })();
 
-if (user && user.isAdmin) document.getElementById('adminBtn').style.display = 'inline-block';
+if (user && user.isAdmin) { document.getElementById('adminBtn').style.display = 'inline-block'; document.getElementById('backupBtn').style.display = 'inline-block'; }
+document.getElementById('backupBtn').onclick = async () => {
+  const btn = document.getElementById('backupBtn');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Backing up...';
+  try {
+    const res = await fetch('/api/admin/backup', { headers: authHeaders });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Backup failed');
+    const blob = await res.blob();
+    const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : 'bug-tracker-backup.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) {
+    alert('Could not create backup: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+};
 document.getElementById('adminBtn').onclick = () => { window.location.href = 'admin.html'; };
 
 document.getElementById('whoAmI').textContent = `${user.name} (${user.role})`;
@@ -58,6 +78,7 @@ document.getElementById('platformTabs').addEventListener('click', (e) => {
   btn.classList.add('active');
 
   currentPlatform = btn.getAttribute('data-platform');
+  loadDevs();
   loadTickets();
   loadStats();
 });
@@ -68,10 +89,21 @@ function visibleStatuses() {
 }
 
 async function loadDevs() {
-  const res = await fetch(`/api/tickets/devs?platform=${currentPlatform}`, { headers: authHeaders });
+  // Load developers from every platform, not just the current tab
+  const res = await fetch('/api/tickets/devs', { headers: authHeaders });
   devs = await res.json();
   const sel = document.getElementById('tAssignee');
-  sel.innerHTML = '<option value="">Unassigned</option>' + devs.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+
+  // Group by platform, with the current platform's team listed first
+  const platforms = [...new Set(devs.map(d => d.platform || 'Other'))]
+    .sort((a, b) => (b === currentPlatform) - (a === currentPlatform) || a.localeCompare(b));
+  sel.innerHTML = '<option value="">Unassigned</option>' + platforms.map(p => {
+    const members = devs.filter(d => (d.platform || 'Other') === p)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return `<optgroup label="${escapeHtml(p)}">` +
+      members.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('') +
+      '</optgroup>';
+  }).join('');
 }
 
 async function loadStats() {
@@ -153,6 +185,19 @@ function assigneeName(id) {
   return d ? escapeHtml(d.name) : 'Unassigned';
 }
 
+function parseDbDate(v) {
+  const d = new Date(String(v || '').replace(' ', 'T'));
+  return isNaN(d) ? null : d;
+}
+function shortDate(v) {
+  const d = parseDbDate(v);
+  return d ? d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+}
+function fullDate(v) {
+  const d = parseDbDate(v);
+  return d ? d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+}
+
 function renderCard(t) {
   const card = document.createElement('div');
   card.className = 'card';
@@ -171,6 +216,7 @@ function renderCard(t) {
       <button class="share-btn" data-token="${t.share_token}">🔗 Share</button>
     </div>
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
+    <div class="meta created" title="${escapeHtml(fullDate(t.created_at))}"><span>🗓 Created ${escapeHtml(shortDate(t.created_at))}</span></div>
   `;
 
   card.querySelector('.share-btn').onclick = async (e) => {
@@ -452,26 +498,37 @@ async function uploadFile(ticketId, file) {
 function attachItemEl(a, onRemove, pending) {
   const el = document.createElement('div');
   el.className = 'attach-item';
-  
   const src = a.previewUrl || a.url;
-
   if (a.type === 'image') {
     const link = document.createElement('a');
-    link.href = src; 
-    link.target = '_blank'; 
-    link.rel = 'noopener';
-
+    link.href = src; link.target = '_blank'; link.rel = 'noopener';
     const img = document.createElement('img');
-    img.src = src; 
-    img.alt = a.name || 'image';
-    
-    img.onerror = () => {
-      img.alt = 'Failed to load image';
-      console.error('Failed to load image at:', src);
-    };
-
-    link.appendChild(img); 
+    img.src = src; img.alt = a.name || 'image';
+    img.onerror = () => { img.alt = 'Failed to load image'; };
+    link.appendChild(img); el.appendChild(link);
+  } else if (a.type === 'video') {
+    const v = document.createElement('video');
+    v.src = src; v.controls = true; v.preload = 'metadata';
+    el.appendChild(v);
+  } else {
+    const link = document.createElement('a');
+    link.className = 'link';
+    link.textContent = '🔗 ' + (a.name || a.url);
+    if (isHttpUrl(a.url)) { link.href = a.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; }
     el.appendChild(link);
+  }
+  if (a.type !== 'link' && a.name) {
+    const f = document.createElement('div'); f.className = 'fname'; f.textContent = a.name; el.appendChild(f);
+  }
+  if (pending) {
+    const t = document.createElement('div'); t.className = 'pending-tag';
+    t.textContent = 'Will upload when you save'; el.appendChild(t);
+  }
+  if (user.role === 'QA') {
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'rm'; rm.title = 'Remove'; rm.textContent = '✕';
+    rm.onclick = onRemove;
+    el.appendChild(rm);
   }
   return el;
 }

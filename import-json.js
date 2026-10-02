@@ -9,7 +9,7 @@ const JSON_FILES = [
   'mrDoiqQB - ios-77.json',
   'JwpEh8zA - android.json',
   'PUwqfWUn - android-77.json',
-  'cl6y0EqF - ios.json'
+  'cI6y0EqF - ios.json'
 ];
 
 const RENDER_APP_URL = 'https://bug-tracker-0a55.onrender.com';
@@ -77,37 +77,6 @@ function isTemplateCard(cardName = '') {
   );
 }
 
-// -------------------------------------------------------------
-// PRE-CLEANUP FUNCTION
-// Deletes previously imported & template tickets before import
-// -------------------------------------------------------------
-async function clearImportedTickets(authHeaders) {
-  console.log('🧹 Cleaning up old imported tickets & template entries...');
-  try {
-    const res = await axios.get(`${RENDER_APP_URL}/api/tickets`, { headers: authHeaders });
-    const tickets = res.data || [];
-
-    // Identify tickets that came from Trello imports or match template titles
-    const toDelete = tickets.filter(t => 
-      (t.description && t.description.includes('Imported from')) ||
-      isTemplateCard(t.title)
-    );
-
-    console.log(`Found ${toDelete.length} old/template tickets to remove.\n`);
-
-    for (const ticket of toDelete) {
-      try {
-        await axios.delete(`${RENDER_APP_URL}/api/tickets/${ticket.id}`, { headers: authHeaders });
-        console.log(` 🗑 Deleted: "${ticket.title}" (ID: ${ticket.id})`);
-      } catch (delErr) {
-        console.warn(` ⚠ Failed to delete ticket ID ${ticket.id}:`, delErr.message);
-      }
-    }
-    console.log('\n✅ Pre-cleanup completed successfully!\n');
-  } catch (err) {
-    console.warn('⚠ Pre-cleanup error:', err.message);
-  }
-}
 
 // -------------------------------------------------------------
 // MIGRATION SCRIPT
@@ -123,10 +92,7 @@ async function importAllBoards() {
     const authHeaders = { Authorization: `Bearer ${loginRes.data.token}` };
     console.log('Authentication successful!\n');
 
-    // 1. Automatically wipe old imported/template data
-    await clearImportedTickets(authHeaders);
-
-    // 2. Loop through and import fresh data
+    // Import data (nothing is deleted)
     for (const fileName of JSON_FILES) {
       const filePath = path.join(__dirname, fileName);
 
