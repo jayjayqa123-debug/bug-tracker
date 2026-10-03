@@ -29,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/presence', require('./routes/presence'));
 
 app.get('/', (req, res) => res.redirect('/index.html'));
 

@@ -11,6 +11,13 @@ const rows = document.getElementById('userRows');
 
 function cell(tr, text) { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); return td; }
 function pill(text, cls) { const s = document.createElement('span'); s.className = 'pill ' + (cls || ''); s.textContent = text; return s; }
+function ago(sec) {
+  if (sec === null || sec === undefined) return 'never signed in';
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.floor(sec / 60) + ' min ago';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' h ago';
+  return Math.floor(sec / 86400) + ' d ago';
+}
 function fmt(d) { return d ? new Date(d.replace(' ', 'T')).toLocaleDateString() : ''; }
 
 function render() {
@@ -20,11 +27,12 @@ function render() {
     (!role || u.role === role) &&
     (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
   const pending = users.filter(u => u.reset_requested_at).length;
+  const onlineNow = users.filter(u => u.is_online).length;
   document.getElementById('summary').textContent =
-    `${list.length} of ${users.length} accounts` + (pending ? ` · ${pending} password reset request${pending > 1 ? 's' : ''} waiting` : '');
+    `${list.length} of ${users.length} accounts · ${onlineNow} online now` + (pending ? ` · ${pending} password reset request${pending > 1 ? 's' : ''} waiting` : '');
 
   rows.innerHTML = '';
-  if (!list.length) { const tr = document.createElement('tr'); cell(tr, 'No matching accounts.').colSpan = 8; rows.appendChild(tr); return; }
+  if (!list.length) { const tr = document.createElement('tr'); cell(tr, 'No matching accounts.').colSpan = 9; rows.appendChild(tr); return; }
   list.forEach(u => {
     const tr = document.createElement('tr');
     if (u.reset_requested_at) tr.className = 'requested';
@@ -32,6 +40,17 @@ function render() {
     cell(tr, u.email);
     cell(tr, u.role);
     cell(tr, u.platform || '—');
+    const presence = document.createElement('td');
+    if (u.is_online) {
+      presence.appendChild(pill('● Online', 'online'));
+    } else {
+      presence.appendChild(pill('○ Offline', 'offline'));
+      const seen = document.createElement('div');
+      seen.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:2px;';
+      seen.textContent = 'Last seen: ' + ago(u.seen_ago_s);
+      presence.appendChild(seen);
+    }
+    tr.appendChild(presence);
     const signin = document.createElement('td');
     if (u.has_password) signin.appendChild(pill('Password'));
     if (u.has_google) { signin.appendChild(document.createTextNode(' ')); signin.appendChild(pill('Google', 'info')); }
@@ -48,6 +67,15 @@ function render() {
     if (!u.has_password) { btn.disabled = true; btn.title = 'Google-only account: no password to reset'; }
     btn.onclick = () => resetPassword(u, btn);
     act.appendChild(btn);
+
+    const del = document.createElement('button');
+    del.className = 'btn-small danger'; del.textContent = 'Delete';
+    del.style.marginLeft = '6px';
+    if (u.is_me) { del.disabled = true; del.title = 'You cannot delete your own account'; }
+    else if (u.is_admin) { del.disabled = true; del.title = 'QA Admin accounts cannot be deleted'; }
+    else if (u.filed_count > 0) { del.disabled = true; del.title = `Filed ${u.filed_count} ticket(s) - kept, so this account cannot be deleted`; }
+    del.onclick = () => deleteUser(u, del);
+    act.appendChild(del);
     tr.appendChild(act);
     rows.appendChild(tr);
   });
@@ -60,7 +88,7 @@ async function load() {
     if (res.status === 403) {
       rows.innerHTML = '';
       const tr = document.createElement('tr');
-      cell(tr, 'You do not have QA Admin access. Ask the site owner to add your email to ADMIN_EMAILS.').colSpan = 8;
+      cell(tr, 'You do not have QA Admin access. Ask the site owner to add your email to ADMIN_EMAILS.').colSpan = 9;
       rows.appendChild(tr); return;
     }
     users = await res.json();
@@ -88,6 +116,22 @@ async function resetPassword(u, btn) {
   }
 }
 
+async function deleteUser(u, btn) {
+  const extra = u.assigned_count ? `\n\n${u.assigned_count} ticket(s) assigned to them will become Unassigned (the tickets are kept).` : '';
+  const online = u.is_online ? '\n\n⚠ This person is online right now.' : '';
+  if (!confirm(`Delete the account for ${u.name} (${u.email})?\n\nThey will no longer be able to sign in.${extra}${online}`)) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE', headers: authHeaders });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Could not delete the account'); btn.disabled = false; return; }
+    load();
+  } catch (e) {
+    alert('Could not reach the server.');
+    btn.disabled = false;
+  }
+}
+
 document.getElementById('pwCopy').onclick = () => {
   const pw = document.getElementById('pwValue').textContent;
   navigator.clipboard.writeText(pw).then(() => { document.getElementById('pwCopy').textContent = 'Copied ✓'; });
@@ -101,6 +145,7 @@ document.getElementById('search').addEventListener('input', render);
 document.getElementById('roleFilter').addEventListener('change', render);
 
 load();
+setInterval(load, 30000);   // keep online/offline up to date
 
 
 // ---- Combined ticket totals (Android + iOS + Web) ----
@@ -112,7 +157,11 @@ async function loadTotals() {
     const set = (id, v) => { document.getElementById(id).textContent = v ?? 0; };
     set('aFiled', s.filedToday); set('aFixed', s.fixedToday); set('aActive', s.stillActive);
     set('aReactive', s.reactive); set('aClosed', s.closedToday); set('aPending', s.pendingRegression);
-    set('aTotal', s.total);
+    set('aTotalClosed', s.totalClosed); set('aTotal', s.total);
+    if (s.closedByPlatform) {
+      document.getElementById('closedBreakdown').textContent = 'Total closed by platform: ' +
+        Object.entries(s.closedByPlatform).map(([p, n]) => `${p} ${n}`).join(' · ');
+    }
     document.getElementById('statsStamp').textContent = '· updated ' + new Date().toLocaleTimeString();
   } catch (e) {
     console.error('Totals error:', e);

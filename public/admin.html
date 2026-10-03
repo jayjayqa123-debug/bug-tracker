@@ -27,8 +27,11 @@
     <div class="stat-card"><div class="num" id="aReactive">–</div><div class="label">RE-ACTIVE</div></div>
     <div class="stat-card"><div class="num" id="aClosed">–</div><div class="label">CLOSED TODAY</div></div>
     <div class="stat-card"><div class="num" id="aPending">–</div><div class="label">PENDING REGRESSION</div></div>
+    <div class="stat-card"><div class="num" id="aTotalClosed">–</div><div class="label">TOTAL CLOSED</div></div>
     <div class="stat-card"><div class="num" id="aTotal">–</div><div class="label">TOTAL</div></div>
   </div>
+
+  <p id="closedBreakdown" style="color:var(--text-muted);font-size:13px;margin:-10px 0 22px;"></p>
 
   <h2 style="margin:0 0 4px; color:var(--heading);">User accounts</h2>
   <p style="color:var(--text-muted, #93a4b8);font-size:13px;margin:0;">
@@ -48,8 +51,8 @@
 
   <div class="table-scroll">
     <table class="users">
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Platform</th><th>Sign-in</th><th>Status</th><th>Joined</th><th>Action</th></tr></thead>
-      <tbody id="userRows"><tr><td colspan="8">Loading…</td></tr></tbody>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Platform</th><th>Presence</th><th>Sign-in</th><th>Status</th><th>Joined</th><th>Action</th></tr></thead>
+      <tbody id="userRows"><tr><td colspan="9">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -68,6 +71,7 @@
   </div>
 </div>
 
+<script src="js/presence.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>

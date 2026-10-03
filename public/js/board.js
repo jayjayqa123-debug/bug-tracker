@@ -16,6 +16,10 @@ const ALL_STATUSES = [
 ];
 
 let currentPlatform = 'Android';
+const ALL_PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live iOS'];
+const ticketCache = {};  // platform -> last loaded tickets (makes tab switching instant)
+const statsCache = {};   // platform -> last loaded stats
+let boardLoading = false;
 let tickets = [];
 let devs = [];
 let editingId = null;
@@ -78,8 +82,19 @@ document.getElementById('platformTabs').addEventListener('click', (e) => {
   btn.classList.add('active');
 
   currentPlatform = btn.getAttribute('data-platform');
-  loadDevs();
-  loadTickets();
+  fillAssignees();
+
+  // Show what we already have for this platform immediately, then refresh it in the background
+  if (ticketCache[currentPlatform]) {
+    tickets = ticketCache[currentPlatform];
+    boardLoading = false;
+  } else {
+    tickets = [];
+    boardLoading = true;   // columns show "Loading..." instead of the previous platform's cards
+  }
+  renderBoard();
+  if (statsCache[currentPlatform]) applyStats(statsCache[currentPlatform]);
+  loadTickets(true);
   loadStats();
 });
 
@@ -92,7 +107,12 @@ async function loadDevs() {
   // Load developers from every platform, not just the current tab
   const res = await fetch('/api/tickets/devs', { headers: authHeaders });
   devs = await res.json();
+  fillAssignees();
+}
+
+function fillAssignees() {
   const sel = document.getElementById('tAssignee');
+  const keep = sel.value;
 
   // Group by platform, with the current platform's team listed first
   const platforms = [...new Set(devs.map(d => d.platform || 'Other'))]
@@ -104,32 +124,63 @@ async function loadDevs() {
       members.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('') +
       '</optgroup>';
   }).join('');
+  if (keep) sel.value = keep;
+}
+
+function applyStats(s) {
+  document.getElementById('filedTodayCount').textContent = s.filedToday ?? 0;
+  document.getElementById('fixedTodayCount').textContent = s.fixedToday ?? 0;
+  document.getElementById('totalFixedCount').textContent = s.totalFixed ?? (s.fixedToday || 0);
+  document.getElementById('stillActiveCount').textContent = s.stillActive ?? 0;
+  document.getElementById('reactiveCount').textContent = s.reactive ?? s.reactiveCount ?? s.reactive_count ?? 0;
+  document.getElementById('closedTodayCount').textContent = s.closedToday ?? 0;
+  document.getElementById('pendingRegressionCount').textContent = s.pendingRegression ?? 0;
+  document.getElementById('totalClosedCount').textContent = s.totalClosed ?? 0;
+  document.getElementById('totalCount').textContent = s.total ?? 0;
 }
 
 async function loadStats() {
+  const platform = currentPlatform;
   try {
-    const res = await fetch(`/api/export/stats?platform=${currentPlatform}`, { headers: authHeaders });
+    const res = await fetch(`/api/export/stats?platform=${encodeURIComponent(platform)}`, { headers: authHeaders });
     if (!res.ok) return;
     const s = await res.json();
-    
-    document.getElementById('filedTodayCount').textContent = s.filedToday ?? 0;
-    document.getElementById('fixedTodayCount').textContent = s.fixedToday ?? 0;
-    document.getElementById('totalFixedCount').textContent = s.totalFixed ?? (s.fixedToday || 0);
-    document.getElementById('stillActiveCount').textContent = s.stillActive ?? 0;
-    document.getElementById('reactiveCount').textContent = s.reactive ?? s.reactiveCount ?? s.reactive_count ?? 0;
-    document.getElementById('closedTodayCount').textContent = s.closedToday ?? 0;
-    document.getElementById('pendingRegressionCount').textContent = s.pendingRegression ?? 0;
-    document.getElementById('totalCount').textContent = s.total ?? 0;
+    statsCache[platform] = s;
+    if (platform === currentPlatform) applyStats(s);   // ignore if the user already switched tabs
   } catch (err) {
     console.error('Error loading stats:', err);
   }
 }
 
 async function loadTickets(silent = false) {
-  const res = await fetch(`/api/tickets?platform=${currentPlatform}`, { headers: authHeaders });
-  tickets = await res.json();
+  const platform = currentPlatform;
+  const res = await fetch(`/api/tickets?platform=${encodeURIComponent(platform)}`, { headers: authHeaders });
+  const data = await res.json();
+  if (!Array.isArray(data)) return;
+  ticketCache[platform] = data;
+  if (platform !== currentPlatform) return;   // user switched tabs while this was loading
+  tickets = data;
+  boardLoading = false;
   renderBoard();
   if (!silent) await checkUrlForTicket();
+}
+
+// After the first load, quietly fetch the other platforms so switching tabs is instant
+async function prefetchOtherPlatforms() {
+  for (const p of ALL_PLATFORMS) {
+    if (p === currentPlatform) continue;
+    try {
+      if (!ticketCache[p]) {
+        const r = await fetch(`/api/tickets?platform=${encodeURIComponent(p)}`, { headers: authHeaders });
+        const d = r.ok ? await r.json() : null;
+        if (Array.isArray(d)) ticketCache[p] = d;
+      }
+      if (!statsCache[p]) {
+        const r = await fetch(`/api/export/stats?platform=${encodeURIComponent(p)}`, { headers: authHeaders });
+        if (r.ok) statsCache[p] = await r.json();
+      }
+    } catch (e) { /* not critical */ }
+  }
 }
 
 function renderBoard() {
@@ -167,7 +218,16 @@ function renderBoard() {
     const status = col.getAttribute('data-status');
     const inColumn = tickets.filter(t => t.status === status);
     col.querySelector('.col-count').textContent = inColumn.length;
-    col.querySelector('.column-body').replaceChildren(...inColumn.map(renderCard));
+    const colBody = col.querySelector('.column-body');
+    if (boardLoading) {
+      const note = document.createElement('div');
+      note.className = 'loading-note';
+      note.textContent = 'Loading…';
+      colBody.replaceChildren(note);
+      col.querySelector('.col-count').textContent = '…';
+    } else {
+      colBody.replaceChildren(...inColumn.map(renderCard));
+    }
   });
 }
 
@@ -716,6 +776,7 @@ async function loadAll() {
   await loadTickets();
   await loadStats();
   startAutoRefresh();
+  prefetchOtherPlatforms();
 }
 
 loadAll();

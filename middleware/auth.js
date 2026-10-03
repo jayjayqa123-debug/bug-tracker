@@ -1,6 +1,22 @@
 const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET || 'change_this_secret';
 
+// ---- Online/offline presence ----
+// Any authenticated request counts as "seen". Writes are limited to one per user per 30 seconds.
+const lastTouch = new Map();
+function touchUser(id, force) {
+  const now = Date.now();
+  if (!force && now - (lastTouch.get(id) || 0) < 30000) return;
+  lastTouch.set(id, now);
+  require('../db/pool')
+    .execute('UPDATE users SET last_seen_at = NOW() WHERE id = ?', [id])
+    .catch(() => {});   // never let presence tracking break a request
+}
+function markOffline(id) {
+  lastTouch.set(id, Date.now());
+  return require('../db/pool').execute('UPDATE users SET last_seen_at = NULL WHERE id = ?', [id]);
+}
+
 function authRequired(req, res, next) {
   const header = req.headers['authorization'];
   if (!header) return res.status(401).json({ error: 'No token provided' });
@@ -8,6 +24,7 @@ function authRequired(req, res, next) {
   try {
     const decoded = jwt.verify(token, SECRET);
     req.user = decoded; // { id, name, email, role }
+    touchUser(decoded.id);
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -36,4 +53,4 @@ function adminRequired(req, res, next) {
   });
 }
 
-module.exports = { authRequired, qaRequired, adminRequired, isAdminUser, SECRET };
+module.exports = { authRequired, qaRequired, adminRequired, isAdminUser, touchUser, markOffline, SECRET };
