@@ -135,7 +135,6 @@ function applyStats(s) {
   document.getElementById('reactiveCount').textContent = s.reactive ?? s.reactiveCount ?? s.reactive_count ?? 0;
   document.getElementById('closedTodayCount').textContent = s.closedToday ?? 0;
   document.getElementById('pendingRegressionCount').textContent = s.pendingRegression ?? 0;
-  document.getElementById('totalClosedCount').textContent = s.totalClosed ?? 0;
   document.getElementById('totalCount').textContent = s.total ?? 0;
 }
 
@@ -761,20 +760,34 @@ document.addEventListener('mouseleave', () => {
 });
 
 // ---------- Auto Refresh Feature (Silent refresh every 5 seconds) ----------
+const lastVersion = {};      // platform -> last "version" string seen
+let lastFullRefresh = Date.now();
+
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(async () => {
-    if (!overlay.classList.contains('open') && !isUserInteracting) {
-      await loadTickets(true);
-      await loadStats();
-    }
+    if (document.hidden) return;                                   // nobody is looking
+    if (overlay.classList.contains('open') || isUserInteracting) return;
+    const platform = currentPlatform;
+    try {
+      // Tiny request first; only download everything if something actually changed
+      const res = await fetch(`/api/tickets/version?platform=${encodeURIComponent(platform)}`, { headers: authHeaders });
+      if (!res.ok) return;
+      const { v } = await res.json();
+      const stale = Date.now() - lastFullRefresh > 60000;          // safety refresh once a minute
+      if (v !== lastVersion[platform] || stale) {
+        lastVersion[platform] = v;
+        lastFullRefresh = Date.now();
+        await Promise.all([loadTickets(true), loadStats()]);
+      }
+    } catch (e) { /* try again next tick */ }
   }, 5000);
 }
 
 async function loadAll() {
-  await loadDevs();
-  await loadTickets();
-  await loadStats();
+  // Load everything at the same time instead of one after another
+  await Promise.all([loadDevs(), loadTickets(true), loadStats()]);
+  await checkUrlForTicket();
   startAutoRefresh();
   prefetchOtherPlatforms();
 }
