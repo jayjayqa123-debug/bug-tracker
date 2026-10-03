@@ -134,50 +134,41 @@ async function loadTickets(silent = false) {
 
 function renderBoard() {
   const board = document.getElementById('board');
+  const statuses = visibleStatuses();
 
-  // 1. Save scroll positions of window and all active column bodies
-  const mainScrollX = window.scrollX;
-  const mainScrollY = window.scrollY;
-  const scrollPositions = {};
+  // Build the columns only when the set of columns changes (first load / platform switch).
+  // Auto-refresh then just swaps the cards inside the existing columns, so the board is never
+  // torn down and nothing jumps back (no scroll position tricks needed).
+  const key = statuses.join('|');
+  if (board.dataset.key !== key) {
+    board.innerHTML = '';
+    statuses.forEach(status => {
+      const col = document.createElement('div');
+      col.className = 'column';
+      col.setAttribute('data-status', status);
+      col.innerHTML = `<div class="column-header"><span>${status}</span><span class="col-count">0</span></div>
+        <div class="column-body" data-status="${status}"></div>`;
+      board.appendChild(col);
 
-  document.querySelectorAll('.column-body').forEach(body => {
-    const status = body.getAttribute('data-status');
-    if (status) {
-      scrollPositions[status] = body.scrollTop;
-    }
-  });
-
-  board.innerHTML = '';
-
-  visibleStatuses().forEach(status => {
-    const col = document.createElement('div');
-    col.className = 'column';
-    const inColumn = tickets.filter(t => t.status === status);
-    col.innerHTML = `<div class="column-header"><span>${status}</span><span>${inColumn.length}</span></div>
-      <div class="column-body" data-status="${status}"></div>`;
-    board.appendChild(col);
-
-    const body = col.querySelector('.column-body');
-
-    body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('dragover'); });
-    body.addEventListener('dragleave', () => body.classList.remove('dragover'));
-    body.addEventListener('drop', async e => {
-      e.preventDefault(); body.classList.remove('dragover');
-      const id = e.dataTransfer.getData('text/plain');
-      await fetch(`/api/tickets/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
-      loadTickets(true); loadStats();
+      const body = col.querySelector('.column-body');
+      body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('dragover'); });
+      body.addEventListener('dragleave', () => body.classList.remove('dragover'));
+      body.addEventListener('drop', async e => {
+        e.preventDefault(); body.classList.remove('dragover');
+        const id = e.dataTransfer.getData('text/plain');
+        await fetch(`/api/tickets/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
+        loadTickets(true); loadStats();
+      });
     });
+    board.dataset.key = key;
+  }
 
-    inColumn.forEach(t => body.appendChild(renderCard(t)));
-
-    // 2. Instantly restore vertical scroll position for each column
-    if (scrollPositions[status] !== undefined) {
-      body.scrollTop = scrollPositions[status];
-    }
+  board.querySelectorAll('.column').forEach(col => {
+    const status = col.getAttribute('data-status');
+    const inColumn = tickets.filter(t => t.status === status);
+    col.querySelector('.col-count').textContent = inColumn.length;
+    col.querySelector('.column-body').replaceChildren(...inColumn.map(renderCard));
   });
-
-  // 3. Restore main window scroll position
-  window.scrollTo(mainScrollX, mainScrollY);
 }
 
 function assigneeName(id) {

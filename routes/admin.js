@@ -57,6 +57,32 @@ router.post('/users/:id/reset-password', async (req, res) => {
   }
 });
 
+// Combined stats for Android + iOS + Web (read-only). Same definitions as the board's stats bar.
+router.get('/stats', async (req, res) => {
+  try {
+    const [[r]] = await pool.query(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(DATE(created_at) = CURDATE()) AS filedToday,
+        SUM(DATE(fixed_at) = CURDATE()) AS fixedToday,
+        SUM(status NOT IN ('Closed', 'Complete (For Retest)', 'Fixed', 'Resolved', 'WONTFIX', 'Duplicate')) AS stillActive,
+        SUM(status IN ('Reactive', 'Re-active', 'Reopened', 'Re-opened')) AS reactive,
+        SUM(DATE(closed_at) = CURDATE()) AS closedToday,
+        SUM(status = 'Complete (For Retest)') AS pendingRegression
+      FROM tickets
+      WHERE platform IN ('Android', 'iOS', 'Web')`);
+    const n = v => Number(v) || 0;
+    res.json({
+      filedToday: n(r.filedToday), fixedToday: n(r.fixedToday), stillActive: n(r.stillActive),
+      reactive: n(r.reactive), closedToday: n(r.closedToday), pendingRegression: n(r.pendingRegression),
+      total: n(r.total)
+    });
+  } catch (err) {
+    console.error('Admin stats error:', err.message);
+    res.status(500).json({ error: 'Could not load stats' });
+  }
+});
+
 // Read-only backup of every filed ticket (plus comments, attachment records, counters and the user
 // list WITHOUT passwords). Sent to the admin's browser as a download - nothing is stored on the server
 // and nothing is changed or deleted.

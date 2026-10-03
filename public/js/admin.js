@@ -101,3 +101,23 @@ document.getElementById('search').addEventListener('input', render);
 document.getElementById('roleFilter').addEventListener('change', render);
 
 load();
+
+
+// ---- Combined ticket totals (Android + iOS + Web) ----
+async function loadTotals() {
+  try {
+    const res = await fetch('/api/admin/stats', { headers: authHeaders });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const s = await res.json();
+    const set = (id, v) => { document.getElementById(id).textContent = v ?? 0; };
+    set('aFiled', s.filedToday); set('aFixed', s.fixedToday); set('aActive', s.stillActive);
+    set('aReactive', s.reactive); set('aClosed', s.closedToday); set('aPending', s.pendingRegression);
+    set('aTotal', s.total);
+    document.getElementById('statsStamp').textContent = '· updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.error('Totals error:', e);
+    document.getElementById('statsStamp').textContent = '· could not load';
+  }
+}
+loadTotals();
+setInterval(loadTotals, 30000);
