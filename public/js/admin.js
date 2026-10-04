@@ -41,13 +41,14 @@ function render() {
     cell(tr, u.role);
     cell(tr, u.platform || '—');
     const presence = document.createElement('td');
+    presence.className = 'presence-cell';
     if (u.is_online) {
       presence.appendChild(pill('● Online', 'online'));
     } else {
       presence.appendChild(pill('○ Offline', 'offline'));
       const seen = document.createElement('div');
       seen.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:2px;';
-      seen.textContent = 'Last seen: ' + ago(u.seen_ago_s);
+      seen.textContent = u.seen_ago_s === null ? 'No activity recorded yet' : 'Last seen ' + ago(u.seen_ago_s);
       presence.appendChild(seen);
     }
     tr.appendChild(presence);
@@ -66,16 +67,18 @@ function render() {
     btn.className = 'btn-small'; btn.textContent = 'Reset password';
     if (!u.has_password) { btn.disabled = true; btn.title = 'Google-only account: no password to reset'; }
     btn.onclick = () => resetPassword(u, btn);
-    act.appendChild(btn);
+    const wrap = document.createElement('div');
+    wrap.className = 'act-wrap';
+    wrap.appendChild(btn);
 
     const del = document.createElement('button');
     del.className = 'btn-small danger'; del.textContent = 'Delete';
-    del.style.marginLeft = '6px';
     if (u.is_me) { del.disabled = true; del.title = 'You cannot delete your own account'; }
     else if (u.is_admin) { del.disabled = true; del.title = 'QA Admin accounts cannot be deleted'; }
     else if (u.filed_count > 0) { del.disabled = true; del.title = `Filed ${u.filed_count} ticket(s) - kept, so this account cannot be deleted`; }
     del.onclick = () => deleteUser(u, del);
-    act.appendChild(del);
+    wrap.appendChild(del);
+    act.appendChild(wrap);
     tr.appendChild(act);
     rows.appendChild(tr);
   });

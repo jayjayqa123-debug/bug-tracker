@@ -44,6 +44,25 @@
   <div class="stat-card"><div class="num" id="totalCount">0</div><div class="label">TOTAL</div></div>
 </div>
 
+<div class="board-toolbar" id="boardToolbar">
+  <div class="search-wrap">
+    <input type="search" id="globalSearch" placeholder="🔍 Search ticket title or number across all platforms…" autocomplete="off">
+    <div class="search-results" id="searchResults" style="display:none;"></div>
+  </div>
+  <div class="filter-wrap">
+    <button type="button" class="filter-btn" id="filterBtn">⛃ Filter <span class="filter-count" id="filterCount" style="display:none;"></span></button>
+    <div class="filter-panel" id="filterPanel" style="display:none;">
+      <div class="filter-head"><strong>Filter</strong><button type="button" class="filter-x" id="filterClose" aria-label="Close">✕</button></div>
+      <div class="filter-section"><div class="filter-title">Assignee</div><div id="fAssignee"></div></div>
+      <div class="filter-section"><div class="filter-title">Priority</div><div id="fPriority"></div></div>
+      <div class="filter-section"><div class="filter-title">Severity</div><div id="fSeverity"></div></div>
+      <button type="button" class="filter-clear" id="filterClear">Clear all filters</button>
+    </div>
+  </div>
+  <span class="filter-info" id="filterInfo"></span>
+  <button type="button" class="filter-clear-bar" id="filterClearBar" style="display:none;">✕ Clear filters</button>
+</div>
+
 <div class="board" id="board"></div>
 
 <button class="fab" id="fabAdd" title="File a new ticket">+</button>
@@ -65,8 +84,40 @@
         <textarea id="tTitle" rows="2" class="full-title-input" required></textarea>
       </div>
       <div class="form-group">
-        <label for="tDescription">Description</label>
-        <textarea id="tDescription" rows="4"></textarea>
+        <label for="richEditor">Description</label>
+        <div class="rich-wrap">
+          <div class="rich-toolbar" id="richToolbar">
+            <select id="rtBlock" title="Text style">
+              <option value="P">Normal text</option>
+              <option value="H1">Heading 1</option>
+              <option value="H2">Heading 2</option>
+              <option value="H3">Heading 3</option>
+            </select>
+            <span class="rt-sep"></span>
+            <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+            <button type="button" data-cmd="code" title="Inline code (select text first)">&lt;/&gt;</button>
+            <span class="rt-sep"></span>
+            <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+            <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+            <button type="button" data-cmd="blockquote" title="Quote">❝</button>
+            <span class="rt-sep"></span>
+            <button type="button" data-cmd="link" title="Add / edit link (Ctrl+K)">🔗 Link</button>
+            <button type="button" data-cmd="unlink" title="Remove link">⛓ Unlink</button>
+            <button type="button" data-cmd="hr" title="Horizontal line">―</button>
+            <span class="rt-sep"></span>
+            <button type="button" data-cmd="template" title="Insert the bug report template">📋 Template</button>
+            <button type="button" data-cmd="removeFormat" title="Clear formatting">Tx</button>
+          </div>
+          <div class="rich-linkbar" id="richLinkBar" style="display:none;">
+            <input type="url" id="richLinkUrl" placeholder="Paste or type a link, e.g. https://example.com">
+            <button type="button" class="btn-attach" id="richLinkOk">Apply</button>
+            <button type="button" class="btn-attach" id="richLinkCancel">Cancel</button>
+          </div>
+          <div class="rich-editor is-empty" id="richEditor" contenteditable="true" data-placeholder="Describe the bug…"></div>
+        </div>
+        <textarea id="tDescription" hidden></textarea>
       </div>
       <div class="form-group">
         <label>Attachments</label>
@@ -116,6 +167,10 @@
         <label for="tFiledBy">Filed By</label>
         <input type="text" id="tFiledBy" disabled>
       </div>
+      <div class="form-group" id="datesWrap" style="display:none;">
+        <label>Dates</label>
+        <div class="dates-grid" id="datesGrid"></div>
+      </div>
       <div class="form-group" id="shareWrap" style="display:none;">
         <label for="tShareLink">Shareable Link</label>
         <input type="text" id="tShareLink" readonly>
@@ -139,6 +194,8 @@
 </div>
 
 <script src="js/presence.js"></script>
+<script src="js/mdlite.js"></script>
+<script src="js/richdesc.js"></script>
 <script src="js/board.js"></script>
 </body>
 </html>

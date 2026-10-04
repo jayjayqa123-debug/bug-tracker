@@ -12,6 +12,7 @@
     <div id="content">Loading...</div>
   </div>
 
+  <script src="js/mdlite.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -34,7 +35,7 @@
           <p><strong>Status:</strong> ${t.status}</p>
           <p><strong>Filed by:</strong> ${escapeHtml(t.filed_by_name || '')}</p>
           <p><strong>Description:</strong></p>
-          <div class="share-desc">${escapeHtml(t.description || 'No description provided.')}</div>
+          <div class="share-desc rich-view">${t.description ? MdLite.toHtml(t.description) : 'No description provided.'}</div>
           ${attachmentsHtml(t.attachments)}
           <p style="color:#64748b;font-size:12px;">Created: ${new Date(t.created_at).toLocaleString()}</p>
         `;

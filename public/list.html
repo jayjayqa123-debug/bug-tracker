@@ -34,6 +34,7 @@
     <input type="text" id="searchInput" placeholder="Search bugs by key or title…">
     <select id="statusFilter"><option value="">All Statuses</option></select>
     <select id="priorityFilter"><option value="">All Priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select>
+    <select id="severityFilter"><option value="">All Severities</option><option>Minor</option><option>Major</option><option>Critical</option><option>Blocker</option></select>
     <select id="assigneeFilter"><option value="">All Assignees</option></select>
     <span class="count" id="countLabel" style="margin-left:auto;color:var(--text-muted);align-self:center;"></span>
   </div>
@@ -57,7 +58,8 @@ const authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bear
 
 const COLS = [
   ['ticket_number', 'Key'], ['title', 'Title'], ['status', 'Status'], ['priority', 'Priority'],
-  ['severity', 'Severity'], ['assignee', 'Assignee'], ['filed_by_name', 'Filed By'], ['created_at', 'Created']
+  ['severity', 'Severity'], ['assignee', 'Assignee'], ['filed_by_name', 'Filed By'], ['created_at', 'Created'],
+  ['updated_at', 'Last Updated'], ['fixed_at', 'Fixed On']
 ];
 
 let currentPlatform = localStorage.getItem('listPlatform') || 'Android';
@@ -116,11 +118,12 @@ function renderTable() {
   const status = document.getElementById('statusFilter').value;
   const prio = document.getElementById('priorityFilter').value;
   const assignee = document.getElementById('assigneeFilter').value;
+  const sev = document.getElementById('severityFilter').value;
 
   const filtered = tickets.filter(t =>
     ((t.ticket_number || '').toLowerCase().includes(search) || (t.title || '').toLowerCase().includes(search) ||
       (t.assignee || '').toLowerCase().includes(search) || (t.filed_by_name || '').toLowerCase().includes(search)) &&
-    (!status || t.status === status) && (!prio || t.priority === prio) && (!assignee || t.assignee === assignee));
+    (!status || t.status === status) && (!prio || t.priority === prio) && (!sev || t.severity === sev) && (!assignee || t.assignee === assignee));
 
   filtered.sort((a, b) =>
     String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? ''), undefined, { numeric: true }) * sortDir);
@@ -138,7 +141,9 @@ function renderTable() {
       <td>${esc(t.assignee)}</td>
       <td>${esc(t.filed_by_name)}</td>
       <td>${esc(fmtDate(t.created_at))}</td>
-    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No bugs match these filters.</td></tr>`;
+      <td>${esc(fmtDate(t.updated_at))}</td>
+      <td>${esc(fmtDate(t.fixed_at))}</td>
+    </tr>`).join('') : `<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">No bugs match these filters.</td></tr>`;
 
   document.getElementById('countLabel').textContent = `${filtered.length} of ${tickets.length} bugs`;
 }
@@ -149,7 +154,7 @@ document.getElementById('headRow').addEventListener('click', e => {
   sortKey = th.dataset.k;
   renderTable();
 });
-['searchInput', 'statusFilter', 'priorityFilter', 'assigneeFilter'].forEach(id =>
+['searchInput', 'statusFilter', 'priorityFilter', 'severityFilter', 'assigneeFilter'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderTable));
 
 fetch('/api/tickets/statuses', { headers: authHeaders })

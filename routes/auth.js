@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const google = require('../services/google');
-const { SECRET, authRequired, isAdminUser } = require('../middleware/auth');
+const { SECRET, authRequired, isAdminUser, touchUser } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -23,6 +23,7 @@ function checkProfile(role, platform) {
 }
 
 function session(user) {
+  touchUser(user.id, true);   // a sign-in counts as being seen
   const base = { id: user.id, name: user.name, email: user.email, role: user.role, platform: user.platform };
   const token = jwt.sign(base, SECRET, { expiresIn: '7d' });
   return {

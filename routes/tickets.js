@@ -67,9 +67,48 @@ router.get('/share/:token', async (req, res) => {
   }
 });
 
+// Very cheap "has anything changed?" check. The board polls this every few seconds and only
+// downloads the full ticket list when the value changes.
+router.get('/version', authRequired, async (req, res) => {
+  try {
+    const p = req.query.platform || null;
+    const w = p ? 'WHERE platform = ?' : '';
+    const wj = p ? 'WHERE t.platform = ?' : '';
+    const params = p ? [p, p, p, p] : [];
+    const [[r]] = await pool.execute(
+      `SELECT
+         (SELECT COUNT(*) FROM tickets ${w}) AS t,
+         (SELECT MAX(updated_at) FROM tickets ${w}) AS m,
+         (SELECT COUNT(*) FROM attachments a JOIN tickets t ON t.id = a.ticket_id ${wj}) AS a,
+         (SELECT COUNT(*) FROM ticket_comments c JOIN tickets t ON t.id = c.ticket_id ${wj}) AS c`,
+      params);
+    res.json({ v: `${r.t}|${r.m}|${r.a}|${r.c}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Search ticket titles (and ticket numbers) across ALL platforms
+router.get('/search', authRequired, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (q.length < 2) return res.json([]);
+    const like = '%' + q.replace(/[\\%_]/g, m => '\\' + m) + '%';
+    const [rows] = await pool.execute(
+      `SELECT id, ticket_number, title, platform, status, priority, severity, created_at
+       FROM tickets WHERE title LIKE ? OR ticket_number LIKE ?
+       ORDER BY created_at DESC LIMIT 30`, [like, like]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error searching tickets' });
+  }
+});
+
 router.get('/', authRequired, async (req, res) => {
   try {
-    let sql = 'SELECT tickets.*, (SELECT COUNT(*) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS comment_count FROM tickets';
+    let sql = 'SELECT tickets.*, (SELECT COUNT(*) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS comment_count, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS last_comment_at FROM tickets';
     const params = [];
     if (req.query.platform) {
       sql += ' WHERE platform = ?';
@@ -88,7 +127,7 @@ router.get('/', authRequired, async (req, res) => {
 
 router.get('/:id', authRequired, async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.execute('SELECT tickets.*, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS last_comment_at FROM tickets WHERE id = ?', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Ticket not found' });
     rows[0].attachments = (await attachmentsFor([rows[0].id]))[rows[0].id];
     res.json(rows[0]);

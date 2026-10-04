@@ -77,11 +77,12 @@ document.getElementById('logoutBtn').onclick = () => {
 document.getElementById('platformTabs').addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
+  switchPlatform(btn.getAttribute('data-platform'));
+});
 
-  document.querySelectorAll('#platformTabs button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-
-  currentPlatform = btn.getAttribute('data-platform');
+function switchPlatform(platform) {
+  document.querySelectorAll('#platformTabs button').forEach(b => b.classList.toggle('active', b.getAttribute('data-platform') === platform));
+  currentPlatform = platform;
   fillAssignees();
 
   // Show what we already have for this platform immediately, then refresh it in the background
@@ -96,7 +97,171 @@ document.getElementById('platformTabs').addEventListener('click', (e) => {
   if (statsCache[currentPlatform]) applyStats(statsCache[currentPlatform]);
   loadTickets(true);
   loadStats();
-});
+  if (!document.getElementById('filterPanel').hidden && document.getElementById('filterPanel').style.display !== 'none') buildFilterPanel();
+  updateFilterUi();
+}
+
+// ---------- Last activity (updated / comment / attachment, whichever is newest) ----------
+function lastActivity(t) {
+  let best = t.updated_at || t.created_at, bestTime = (parseDbDate(best) || 0) * 1;
+  const consider = v => {
+    const d = parseDbDate(v);
+    if (d && d.getTime() > bestTime) { best = v; bestTime = d.getTime(); }
+  };
+  consider(t.last_comment_at);
+  (t.attachments || []).forEach(a => consider(a.created_at));
+  return best;
+}
+
+// ---------- Filters (assignee / priority / severity), kept separately for each platform ----------
+const filtersByPlatform = {};
+const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
+const SEVERITIES = ['Minor', 'Major', 'Critical', 'Blocker'];
+
+function getFilters() {
+  return filtersByPlatform[currentPlatform] ||
+    (filtersByPlatform[currentPlatform] = { assignee: new Set(), priority: new Set(), severity: new Set() });
+}
+function activeFilterCount() {
+  const f = getFilters();
+  return f.assignee.size + f.priority.size + f.severity.size;
+}
+function applyFilters(list) {
+  if (!activeFilterCount()) return list;
+  const f = getFilters();
+  return list.filter(t =>
+    (!f.assignee.size || f.assignee.has(t.assignee_id || '')) &&
+    (!f.priority.size || f.priority.has(t.priority)) &&
+    (!f.severity.size || f.severity.has(t.severity)));
+}
+
+function filterRow(group, value, labelHtml, count) {
+  const checked = getFilters()[group].has(value) ? 'checked' : '';
+  return `<label class="filter-row"><input type="checkbox" data-group="${group}" data-value="${escapeHtml(value)}" ${checked}>` +
+         `<span class="filter-label">${labelHtml}</span><span class="filter-n">${count}</span></label>`;
+}
+
+function buildFilterPanel() {
+  const countOf = (fn) => tickets.filter(fn).length;
+
+  const ids = [...new Set(tickets.map(t => t.assignee_id || ''))];
+  const people = ids.map(id => ({ id, name: id ? ((devs.find(d => d.id === id) || {}).name || 'Unknown') : 'No assignee' }))
+    .sort((a, b) => a.id === '' ? -1 : b.id === '' ? 1 : a.name.localeCompare(b.name));
+  document.getElementById('fAssignee').innerHTML = people.map(p =>
+    filterRow('assignee', p.id, (p.id ? '👤 ' : '🚫 ') + escapeHtml(p.name), countOf(t => (t.assignee_id || '') === p.id))).join('') || '<div class="filter-empty">No tickets</div>';
+
+  document.getElementById('fPriority').innerHTML = PRIORITIES.map(p =>
+    filterRow('priority', p, `<span class="badge prio-${p}">${p}</span>`, countOf(t => t.priority === p))).join('');
+  document.getElementById('fSeverity').innerHTML = SEVERITIES.map(p =>
+    filterRow('severity', p, `<span class="badge sev-${p}">${p}</span>`, countOf(t => t.severity === p))).join('');
+}
+
+function updateFilterUi(shownCount) {
+  const n = activeFilterCount();
+  const badge = document.getElementById('filterCount');
+  badge.style.display = n ? 'inline-block' : 'none';
+  badge.textContent = n;
+  document.getElementById('filterBtn').classList.toggle('active', n > 0);
+  document.getElementById('filterClearBar').style.display = n ? 'inline-block' : 'none';
+  const info = document.getElementById('filterInfo');
+  if (n && typeof shownCount === 'number') info.textContent = `Showing ${shownCount} of ${tickets.length} tickets`;
+  else if (!n) info.textContent = '';
+}
+
+function clearFilters() {
+  const f = getFilters();
+  f.assignee.clear(); f.priority.clear(); f.severity.clear();
+  if (document.getElementById('filterPanel').style.display !== 'none') buildFilterPanel();
+  renderBoard();
+}
+
+(function wireFilters() {
+  const panel = document.getElementById('filterPanel');
+  const open = () => { buildFilterPanel(); panel.style.display = 'block'; };
+  const close = () => { panel.style.display = 'none'; };
+  document.getElementById('filterBtn').onclick = (e) => {
+    e.stopPropagation();
+    panel.style.display === 'none' ? open() : close();
+  };
+  document.getElementById('filterClose').onclick = close;
+  document.getElementById('filterClear').onclick = clearFilters;
+  document.getElementById('filterClearBar').onclick = clearFilters;
+  panel.addEventListener('click', e => e.stopPropagation());
+  panel.addEventListener('change', e => {
+    const cb = e.target.closest('input[type="checkbox"]');
+    if (!cb) return;
+    const set = getFilters()[cb.dataset.group];
+    cb.checked ? set.add(cb.dataset.value) : set.delete(cb.dataset.value);
+    renderBoard();
+  });
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
+
+// ---------- Search tickets by title across ALL platforms ----------
+(function wireSearch() {
+  const input = document.getElementById('globalSearch');
+  const box = document.getElementById('searchResults');
+  let timer = null, seq = 0;
+
+  const hide = () => { box.style.display = 'none'; };
+  const hl = (text, q) => {
+    const safe = escapeHtml(text);
+    const re = new RegExp(escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+    return safe.replace(re, m => `<mark>${m}</mark>`);
+  };
+
+  async function run(q) {
+    const mine = ++seq;
+    box.style.display = 'block';
+    box.innerHTML = '<div class="search-note">Searching…</div>';
+    try {
+      const res = await fetch(`/api/tickets/search?q=${encodeURIComponent(q)}`, { headers: authHeaders });
+      if (mine !== seq) return;                       // a newer search replaced this one
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const rows = await res.json();
+      box.innerHTML = rows.length
+        ? rows.map(r => `<div class="search-item" data-id="${escapeHtml(r.id)}" data-platform="${escapeHtml(r.platform)}">
+            <div class="si-top"><span class="tno">${escapeHtml(r.ticket_number || '')}</span>
+              <span class="si-plat">${escapeHtml(r.platform)}</span><span class="si-status">${escapeHtml(r.status)}</span></div>
+            <div class="si-title">${hl(r.title, q)}</div></div>`).join('')
+        : '<div class="search-note">No tickets found</div>';
+    } catch (e) {
+      if (mine === seq) box.innerHTML = '<div class="search-note">Search failed. Please try again.</div>';
+    }
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { seq++; hide(); return; }
+    timer = setTimeout(() => run(q), 300);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { input.value = ''; hide(); }
+    if (e.key === 'Enter') { const first = box.querySelector('.search-item'); if (first) first.click(); }
+  });
+  input.addEventListener('focus', () => { if (box.children.length && input.value.trim().length >= 2) box.style.display = 'block'; });
+  box.addEventListener('click', e => {
+    const item = e.target.closest('.search-item');
+    if (item) goToTicket(item.dataset.id, item.dataset.platform);
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) hide(); });
+
+  window.__clearSearch = () => { input.value = ''; hide(); };
+})();
+
+async function goToTicket(id, platform) {
+  window.__clearSearch();
+  if (platform && platform !== currentPlatform) switchPlatform(platform);
+  try {
+    const res = await fetch(`/api/tickets/${id}`, { headers: authHeaders });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    openModal(await res.json(), true);
+  } catch (e) {
+    alert('Could not open that ticket.');
+  }
+}
 
 function visibleStatuses() {
   if (currentPlatform === 'Web') return ALL_STATUSES.filter(s => s !== 'Filed Ticket List for Host');
@@ -213,9 +378,10 @@ function renderBoard() {
     board.dataset.key = key;
   }
 
+  const shown = applyFilters(tickets);
   board.querySelectorAll('.column').forEach(col => {
     const status = col.getAttribute('data-status');
-    const inColumn = tickets.filter(t => t.status === status);
+    const inColumn = shown.filter(t => t.status === status);
     col.querySelector('.col-count').textContent = inColumn.length;
     const colBody = col.querySelector('.column-body');
     if (boardLoading) {
@@ -228,6 +394,7 @@ function renderBoard() {
       colBody.replaceChildren(...inColumn.map(renderCard));
     }
   });
+  updateFilterUi(shown.length);
 }
 
 function assigneeName(id) {
@@ -249,6 +416,7 @@ function fullDate(v) {
 }
 
 function renderCard(t) {
+  const upd = lastActivity(t);
   const card = document.createElement('div');
   card.className = 'card';
   card.setAttribute('data-ticket-id', t.id);
@@ -267,6 +435,9 @@ function renderCard(t) {
     </div>
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
     <div class="meta created" title="${escapeHtml(fullDate(t.created_at))}"><span>🗓 Created ${escapeHtml(shortDate(t.created_at))}</span></div>
+    <div class="meta created" title="${escapeHtml(fullDate(upd))}"><span>↻ Updated ${escapeHtml(shortDate(upd))}</span></div>
+    ${t.fixed_at ? `<div class="meta created fixed" title="${escapeHtml(fullDate(t.fixed_at))}"><span>✔ Fixed ${escapeHtml(shortDate(t.fixed_at))}</span></div>` : ''}
+    ${(t.status === 'Closed' && t.closed_at) ? `<div class="meta created closed" title="${escapeHtml(fullDate(t.closed_at))}"><span>🔒 Closed ${escapeHtml(shortDate(t.closed_at))}</span></div>` : ''}
   `;
 
   card.querySelector('.share-btn').onclick = async (e) => {
@@ -323,7 +494,7 @@ function openModal(ticket, updateUrl = true) {
   const titleEl = document.getElementById('tTitle');
   titleEl.value = ticket ? ticket.title : '';
   
-  document.getElementById('tDescription').value = ticket ? ticket.description : '';
+  window.richDesc.load(ticket ? (ticket.description || '') : window.richDesc.TEMPLATE);
   document.getElementById('tPriority').value = ticket ? ticket.priority : 'Medium';
   document.getElementById('tSeverity').value = ticket ? ticket.severity : 'Minor';
   document.getElementById('tAssignee').value = ticket ? (ticket.assignee_id || '') : '';
@@ -343,6 +514,16 @@ function openModal(ticket, updateUrl = true) {
     shareWrap.style.display = 'none';
     deleteBtn.style.display = 'none';
   }
+  const datesWrap = document.getElementById('datesWrap');
+  if (ticket) {
+    const rows = [['Created', ticket.created_at], ['Last updated', lastActivity(ticket)], ['Fixed', ticket.fixed_at],
+      ['Closed', ticket.status === 'Closed' ? ticket.closed_at : null]].filter(r => r[1]);
+    document.getElementById('datesGrid').innerHTML = rows.map(r =>
+      `<div><span>${r[0]}</span><strong>${escapeHtml(fullDate(r[1]))}</strong></div>`).join('');
+    datesWrap.style.display = rows.length ? 'block' : 'none';
+  } else {
+    datesWrap.style.display = 'none';
+  }
   applyRoleRestrictions(ticket);
   currentAttachments = ticket ? (ticket.attachments || (ticket.attachments = [])) : [];
   pendingAttachments = [];
@@ -360,6 +541,7 @@ function applyRoleRestrictions(ticket) {
 
   document.getElementById('tTitle').disabled = !isQA;
   document.getElementById('tDescription').disabled = !isQA;
+  window.richDesc.setReadOnly(!isQA);
   document.getElementById('tPriority').disabled = !isQA;
   document.getElementById('tSeverity').disabled = !isQA;
 
@@ -772,7 +954,10 @@ function startAutoRefresh() {
     try {
       // Tiny request first; only download everything if something actually changed
       const res = await fetch(`/api/tickets/version?platform=${encodeURIComponent(platform)}`, { headers: authHeaders });
-      if (!res.ok) return;
+      if (!res.ok) {                                              // older server without /version: plain refresh
+        await Promise.all([loadTickets(true), loadStats()]);
+        return;
+      }
       const { v } = await res.json();
       const stale = Date.now() - lastFullRefresh > 60000;          // safety refresh once a minute
       if (v !== lastVersion[platform] || stale) {
