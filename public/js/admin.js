@@ -18,7 +18,7 @@ function ago(sec) {
   if (sec < 86400) return Math.floor(sec / 3600) + ' h ago';
   return Math.floor(sec / 86400) + ' d ago';
 }
-function fmt(d) { return d ? new Date(d.replace(' ', 'T')).toLocaleDateString() : ''; }
+function fmt(d) { return d ? PhTime.date(d) : ''; }
 
 function render() {
   const q = document.getElementById('search').value.trim().toLowerCase();
@@ -165,7 +165,7 @@ async function loadTotals() {
       document.getElementById('closedBreakdown').textContent = 'Total closed by platform: ' +
         Object.entries(s.closedByPlatform).map(([p, n]) => `${p} ${n}`).join(' · ');
     }
-    document.getElementById('statsStamp').textContent = '· updated ' + new Date().toLocaleTimeString();
+    document.getElementById('statsStamp').textContent = '· updated ' + PhTime.time(new Date());
   } catch (e) {
     console.error('Totals error:', e);
     document.getElementById('statsStamp').textContent = '· could not load';

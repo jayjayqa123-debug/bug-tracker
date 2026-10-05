@@ -104,11 +104,11 @@ router.get('/stats', async (req, res) => {
     const [[r]] = await pool.query(`
       SELECT
         COUNT(*) AS total,
-        SUM(DATE(created_at) = CURDATE()) AS filedToday,
-        SUM(DATE(fixed_at) = CURDATE()) AS fixedToday,
+        SUM(DATE(created_at + INTERVAL 8 HOUR) = DATE(UTC_TIMESTAMP() + INTERVAL 8 HOUR)) AS filedToday,
+        SUM(DATE(fixed_at + INTERVAL 8 HOUR) = DATE(UTC_TIMESTAMP() + INTERVAL 8 HOUR)) AS fixedToday,
         SUM(status NOT IN ('Closed', 'Complete (For Retest)', 'Fixed', 'Resolved', 'WONTFIX', 'Duplicate')) AS stillActive,
         SUM(status IN ('Reactive', 'Re-active', 'Reopened', 'Re-opened')) AS reactive,
-        SUM(DATE(closed_at) = CURDATE()) AS closedToday,
+        SUM(DATE(closed_at + INTERVAL 8 HOUR) = DATE(UTC_TIMESTAMP() + INTERVAL 8 HOUR)) AS closedToday,
         SUM(status = 'Complete (For Retest)') AS pendingRegression,
         SUM(status = 'Closed') AS totalClosed
       FROM tickets

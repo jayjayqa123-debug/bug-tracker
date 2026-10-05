@@ -19,7 +19,35 @@ const pool = mysql.createPool({
 
   waitForConnections: true,
   connectionLimit: 10,
-  dateStrings: true
+  dateStrings: true,
+
+  // Cloud databases close idle connections; keep them alive and drop stale ones quickly
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  maxIdle: 4,
+  idleTimeout: 60000,
+  connectTimeout: 20000
 });
+
+// Always talk to the database in UTC, so stored times never depend on the server's own time zone
+// (Render, TiDB and your PC may all differ). The pages convert UTC to Philippine time for display.
+pool.pool.on('connection', conn => conn.query("SET time_zone = '+00:00'"));
+
+// If a stale connection was reset by the network/database (ECONNRESET), retry read queries once
+const RETRY_CODES = new Set(['ECONNRESET', 'PROTOCOL_CONNECTION_LOST', 'EPIPE', 'ETIMEDOUT']);
+for (const method of ['query', 'execute']) {
+  const original = pool[method].bind(pool);
+  pool[method] = async (sql, params) => {
+    try {
+      return await original(sql, params);
+    } catch (err) {
+      const text = typeof sql === 'string' ? sql : (sql && sql.sql) || '';
+      if (RETRY_CODES.has(err.code) && /^\s*(select|show)\b/i.test(text)) {
+        return original(sql, params);
+      }
+      throw err;
+    }
+  };
+}
 
 module.exports = pool;

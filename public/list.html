@@ -49,6 +49,7 @@
   </div>
 </div>
 
+<script src="js/phtime.js"></script>
 <script src="js/presence.js"></script>
 <script>
 const token = localStorage.getItem('token');
@@ -109,8 +110,7 @@ function fillAssignees() {
 }
 
 function fmtDate(v) {
-  const d = new Date(v);
-  return isNaN(d) ? '' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return PhTime.dateTime(v);
 }
 
 function renderTable() {

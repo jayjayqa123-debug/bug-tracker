@@ -403,16 +403,15 @@ function assigneeName(id) {
 }
 
 function parseDbDate(v) {
-  const d = new Date(String(v || '').replace(' ', 'T'));
-  return isNaN(d) ? null : d;
+  return PhTime.parse(v);   // database times are UTC
 }
 function shortDate(v) {
   const d = parseDbDate(v);
-  return d ? d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+  return d ? PhTime.date(d) : '—';
 }
 function fullDate(v) {
   const d = parseDbDate(v);
-  return d ? d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  return d ? PhTime.dateTime(d) : '';
 }
 
 function renderCard(t) {
@@ -862,7 +861,7 @@ function renderComments(list) {
     const role = document.createElement('span');
     role.className = 'role-tag role-' + c.user_role; role.textContent = c.user_role;
     const when = document.createElement('span');
-    when.className = 'comment-time'; when.textContent = new Date(c.created_at.replace(' ', 'T')).toLocaleString();
+    when.className = 'comment-time'; when.textContent = PhTime.dateTime(c.created_at);
     head.append(who, role, when);
     if (mine) {
       const del = document.createElement('button');
