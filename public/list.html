@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bug List - Jira Style View</title>
+<script>
+  document.documentElement.setAttribute('data-theme',
+    localStorage.getItem('theme') ||
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+</script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -25,6 +30,7 @@
   </div>
   <div class="top-actions">
     <span class="who" id="whoAmI"></span>
+      <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
     <button id="logoutBtn">Log Out</button>
   </div>
 </header>
@@ -166,5 +172,6 @@ fetch('/api/tickets/statuses', { headers: authHeaders })
 
 loadData();
 </script>
+<script src="/js/theme.js"></script>
 </body>
 </html>

@@ -1012,3 +1012,86 @@ table.users td:last-child { width: 156px; min-width: 156px; max-width: 156px; }
   width: 132px; height: 32px; padding: 0 8px; margin: 0;
   font-size: 12px; line-height: 32px; white-space: nowrap; text-align: center;
 }
+
+
+/* =========================================================
+   DARK MODE (added) - activated by <html data-theme="dark">
+   ========================================================= */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --panel-card: #273449;
+  --border: #3b4a63;
+  --border-focus: #60a5fa;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --heading: #f8fafc;
+
+  --surface-2: #334155;
+  --surface-3: #475569;
+  --surface-hover: #2c3b52;
+  --surface-disabled: #2a3547;
+  --warn-text: #fbbf24;
+}
+
+/* Page backgrounds (these were hard-coded gradients) */
+[data-theme="dark"] body {
+  background: linear-gradient(135deg, #0b1220 0%, #1a1633 55%, #0d1b26 100%) fixed;
+}
+[data-theme="dark"] body.auth-page {
+  background: linear-gradient(135deg, #0b1220 0%, #1a1633 55%, #0d1b26 100%) fixed;
+}
+
+/* Hard-coded light colors that need a dark version */
+[data-theme="dark"] .column-body.dragover { background: #1e3a5f; }
+[data-theme="dark"] .comment.mine { background: #1e3a5f; border-color: #60a5fa; }
+[data-theme="dark"] .pill.info { background: #1e3a5f; }
+[data-theme="dark"] .pill.offline { background: #334155; color: #cbd5e1; }
+[data-theme="dark"] table.users tr.requested { background: #3d3320; }
+[data-theme="dark"] .btn-small.danger:disabled { background: var(--surface-2); }
+[data-theme="dark"] .card .meta.created.fixed { color: #4ade80; }
+[data-theme="dark"] .card .meta.created.closed { color: #94a3b8; }
+[data-theme="dark"] .msg.err { color: #fca5a5; }
+[data-theme="dark"] .msg.ok { color: #86efac; }
+[data-theme="dark"] .rich-editor a,
+[data-theme="dark"] .rich-view a { color: #93c5fd; }
+[data-theme="dark"] .search-results mark { background: #854d0e; color: #fef3c7; }
+[data-theme="dark"] .card { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+
+/* Select dropdown arrow (was dark gray, now light) */
+[data-theme="dark"] select,
+[data-theme="dark"] .form-group select,
+[data-theme="dark"] .modal select,
+[data-theme="dark"] .auth-card select,
+[data-theme="dark"] .card select,
+[data-theme="dark"] .overlay select {
+  background: var(--panel-card)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
+    no-repeat calc(100% - 12px) center / 12px 12px !important;
+}
+
+/* Theme toggle button */
+#theme-toggle {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+#theme-toggle:hover { background: var(--surface-3); }
+
+/* Use class="floating" on pages with no top bar (login, share) */
+#theme-toggle.floating {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 200;
+}
