@@ -207,30 +207,55 @@ router.put('/:id', authRequired, async (req, res) => {
 });
 
 // Safely update ticket status and timestamps without raw string interpolation
+// Moves a ticket to a new status. Only the columns that really change are written.
+async function moveTicket(id, status) {
+  const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [id]);
+  const t = existing[0];
+  if (!t) return null;
+  const blank = v => !v || /^0000-00-00/.test(String(v));
+  const sets = ['status = ?'];
+  if (status === 'Complete (For Retest)' && blank(t.fixed_at)) sets.push('fixed_at = NOW()');
+  if (status === 'Closed') {
+    if (t.status !== 'Closed' || blank(t.closed_at)) sets.push('closed_at = NOW()');
+  } else if (t.closed_at) {
+    sets.push('closed_at = NULL');
+  }
+  await pool.execute(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`, [status, id]);
+  return true;
+}
+
+// Self-heal: if the database rejects a move because of an invalid "0000-00-00" date on this ticket,
+// blank that date and try once more.
+const DATE_ERRORS = new Set(['ER_TRUNCATED_WRONG_VALUE', 'ER_WARN_DATA_OUT_OF_RANGE', 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD']);
+async function repairDates(id) {
+  for (const col of ['fixed_at', 'closed_at']) {
+    try {
+      await pool.execute(`UPDATE tickets SET ${col} = NULL WHERE id = ? AND ${col} IS NOT NULL AND CAST(${col} AS CHAR) LIKE '0000%'`, [id]);
+    } catch (e) { /* keep going */ }
+  }
+}
+
 router.put('/:id/status', authRequired, async (req, res) => {
   try {
     const { status } = req.body;
     if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
-    const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
-    if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
 
-    const isComplete = status === 'Complete (For Retest)';
-    const isClosed = status === 'Closed';
-
-    await pool.execute(
-      `UPDATE tickets 
-       SET status = ?, 
-           fixed_at = CASE WHEN ? = TRUE AND fixed_at IS NULL THEN NOW() ELSE fixed_at END,
-           closed_at = CASE WHEN ? = TRUE THEN NOW() ELSE NULL END 
-       WHERE id = ?`,
-      [status, isComplete, isClosed, req.params.id]
-    );
+    let found;
+    try {
+      found = await moveTicket(req.params.id, status);
+    } catch (err) {
+      if (!DATE_ERRORS.has(err.code) && err.errno !== 1292) throw err;
+      console.warn('Invalid date on ticket', req.params.id, '- repairing and retrying');
+      await repairDates(req.params.id);
+      found = await moveTicket(req.params.id, status);
+    }
+    if (!found) return res.status(404).json({ error: 'Ticket not found' });
 
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error moving ticket' });
+    console.error('Error moving ticket', req.params.id, '->', req.body && req.body.status, ':', err.code, err.message);
+    res.status(500).json({ error: 'Server error moving ticket', code: err.code || null });
   }
 });
 

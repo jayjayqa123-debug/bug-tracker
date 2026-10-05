@@ -52,6 +52,20 @@ async function migrate() {
   if (!(await columnInfo('users', 'must_change_password'))) {
     await pool.query('ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0');
   }
+  // Faster board loading: index that matches "WHERE platform = ? ORDER BY created_at"
+  try {
+    const [idx] = await pool.query(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tickets' AND INDEX_NAME = 'idx_platform_created'`);
+    if (!idx.length) await pool.query('ALTER TABLE tickets ADD INDEX idx_platform_created (platform, created_at)');
+  } catch (e) { console.log('Could not add speed index (not critical):', e.message); }
+  // Repair invalid "0000-00-00" dates (they made some tickets impossible to move)
+  for (const col of ['fixed_at', 'closed_at']) {
+    try {
+      const [r] = await pool.query(`UPDATE tickets SET ${col} = NULL WHERE ${col} IS NOT NULL AND CAST(${col} AS CHAR) LIKE '0000%'`);
+      if (r.affectedRows) console.log(`Repaired ${r.affectedRows} ticket(s) with an invalid ${col}.`);
+    } catch (e) { console.log(`Could not check ${col} (not critical):`, e.message); }
+  }
   if (!(await columnInfo('users', 'last_seen_at'))) {
     await pool.query('ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL');
   }

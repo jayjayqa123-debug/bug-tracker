@@ -371,7 +371,11 @@ function renderBoard() {
       body.addEventListener('drop', async e => {
         e.preventDefault(); body.classList.remove('dragover');
         const id = e.dataTransfer.getData('text/plain');
-        await fetch(`/api/tickets/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
+        const r = await fetch(`/api/tickets/${id}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status }) });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          alert('Could not move this ticket: ' + (d.error || ('HTTP ' + r.status)) + (d.code ? ' (' + d.code + ')' : ''));
+        }
         loadTickets(true); loadStats();
       });
     });
@@ -642,7 +646,13 @@ form.onsubmit = async (e) => {
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save update'); return; }
       
       const newStatus = document.getElementById('tStatus').value;
-      await fetch(`/api/tickets/${editingId}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status: newStatus }) });
+      const sr = await fetch(`/api/tickets/${editingId}/status`, { method: 'PUT', headers: authHeaders, body: JSON.stringify({ status: newStatus }) });
+      if (!sr.ok) {
+        const d = await sr.json().catch(() => ({}));
+        alert('Could not change the status: ' + (d.error || ('HTTP ' + sr.status)) + (d.code ? ' (' + d.code + ')' : ''));
+        loadTickets(true);
+        return;
+      }
     } else {
       payload.platform = currentPlatform;
       const res = await fetch('/api/tickets', { method: 'POST', headers: authHeaders, body: JSON.stringify(payload) });
