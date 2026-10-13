@@ -4,7 +4,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
-const { logActivity } = require('../db/activity');
+const { logActivity, activityCommentSql } = require('../db/activity');
 const { authRequired } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
@@ -15,44 +15,17 @@ async function ticketExists(id) {
   return !!rows[0];
 }
 
-// router.get('/', authRequired, async (req, res) => {
-//   try {
-//     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
-//     const [rows] = await pool.execute(
-//       'SELECT id, user_id, user_name, user_role, body, created_at FROM ticket_comments WHERE ticket_id = ? ORDER BY created_at, id',
-//       [req.params.id]
-//     );
-//     res.json(rows);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ error: 'Server error loading comments' });
-//   }
-// });
 router.get('/', authRequired, async (req, res) => {
   try {
     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
-    
-    // 1. Fetch comments
-    const [comments] = await pool.execute(
-      `SELECT id, user_id, user_name, user_role, body, created_at, 'comment' AS type 
-       FROM ticket_comments WHERE ticket_id = ?`,
+    const [rows] = await pool.execute(
+      `SELECT id, user_id, user_name, user_role, body, created_at FROM ticket_comments WHERE ticket_id = ? AND NOT ${activityCommentSql('body')} ORDER BY created_at, id`,
       [req.params.id]
     );
-
-    // 2. Fetch recorded activities from ticket_activity
-    const [activities] = await pool.execute(
-      `SELECT id, user_id, user_name, user_role, CONCAT(action, IF(details IS NULL, '', CONCAT(': ', details))) AS body, created_at, 'activity' AS type 
-       FROM ticket_activity WHERE ticket_id = ?`,
-      [req.params.id]
-    );
-
-    // 3. Combine both lists and sort them chronologically by date
-    const combined = [...comments, ...activities].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-    res.json(combined);
+    res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error loading comments and activity' });
+    res.status(500).json({ error: 'Server error loading comments' });
   }
 });
 

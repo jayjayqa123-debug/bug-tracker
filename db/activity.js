@@ -42,4 +42,21 @@ async function userNames(ids) {
   return Object.fromEntries(rows.map(r => [r.id, r.name]));
 }
 
-module.exports = { ensureActivityTable, logActivity, userNames, DDL };
+// Activity entries must never show up in the comment list. Some older versions saved them into
+// ticket_comments as text like  created: {"platform":"iOS"}  - this SQL condition spots those rows.
+const ACTIVITY_ACTIONS = ['created', 'assigned', 'reassigned', 'unassigned', 'updated', 'moved',
+  'attached', 'removed_attachment', 'commented'];
+function activityCommentSql(col) {
+  col = col || 'body';
+  return '(' + ACTIVITY_ACTIONS.map(a => `${col} LIKE '${a}: {%'`).join(' OR ') + ')';
+}
+
+// One-off cleanup: remove activity text that was wrongly saved as a comment.
+async function purgeActivityComments() {
+  try {
+    const [r] = await pool.query(`DELETE FROM ticket_comments WHERE ${activityCommentSql('body')}`);
+    if (r.affectedRows) console.log(`Removed ${r.affectedRows} activity entr${r.affectedRows === 1 ? 'y' : 'ies'} that were saved as comments.`);
+  } catch (e) { console.log('Could not clean up activity-as-comment rows (not critical):', e.message); }
+}
+
+module.exports = { ensureActivityTable, logActivity, userNames, DDL, activityCommentSql, purgeActivityComments };

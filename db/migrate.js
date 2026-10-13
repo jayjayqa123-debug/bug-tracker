@@ -85,6 +85,7 @@ async function migrate() {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 
   await require('./activity').ensureActivityTable();
+  await require('./activity').purgeActivityComments();
 
   // Widen platform columns on older databases so the 77 Live platforms are accepted
   const PLATFORM_ENUM = "ENUM('Android','iOS','Web','77 Live Android','77 Live iOS')";

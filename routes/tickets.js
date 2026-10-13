@@ -3,7 +3,8 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const { authRequired, qaRequired } = require('../middleware/auth');
 const { nextNumber, peekNumber } = require('../db/ticketNumber');
-const { logActivity, userNames } = require('../db/activity');
+const { logActivity, userNames, activityCommentSql } = require('../db/activity');
+const REAL_COMMENT = activityCommentSql('c.body'); // excludes activity text saved as comments
 const { router: attachmentsRouter, attachmentsFor, removeFile } = require('./attachments');
 const commentsRouter = require('./comments');
 
@@ -81,7 +82,7 @@ router.get('/version', authRequired, async (req, res) => {
          (SELECT COUNT(*) FROM tickets ${w}) AS t,
          (SELECT MAX(updated_at) FROM tickets ${w}) AS m,
          (SELECT COUNT(*) FROM attachments a JOIN tickets t ON t.id = a.ticket_id ${wj}) AS a,
-         (SELECT COUNT(*) FROM ticket_comments c JOIN tickets t ON t.id = c.ticket_id ${wj}) AS c`,
+         (SELECT COUNT(*) FROM ticket_comments c JOIN tickets t ON t.id = c.ticket_id ${wj ? wj + ' AND' : 'WHERE'} NOT ${REAL_COMMENT}) AS c`,
       params);
     res.json({ v: `${r.t}|${r.m}|${r.a}|${r.c}` });
   } catch (err) {
@@ -93,21 +94,58 @@ router.get('/version', authRequired, async (req, res) => {
 // Activity feed for one ticket (newest first)
 router.get('/:id/activity', authRequired, async (req, res) => {
   try {
-    const [tix] = await pool.execute('SELECT id, filed_by_name, created_at FROM tickets WHERE id = ?', [req.params.id]);
+    const [tix] = await pool.execute('SELECT id, filed_by_name, status, created_at, updated_at FROM tickets WHERE id = ?', [req.params.id]);
     if (!tix[0]) return res.status(404).json({ error: 'Ticket not found' });
+    const ticketId = req.params.id;
     const [rows] = await pool.execute(
       `SELECT id, user_name, user_role, action, details, source, created_at
-       FROM ticket_activity WHERE ticket_id = ? ORDER BY created_at DESC, id DESC LIMIT 300`, [req.params.id]);
+       FROM ticket_activity WHERE ticket_id = ? ORDER BY created_at DESC, id DESC LIMIT 300`, [ticketId]);
     const items = rows.map(r => {
       let d = null;
-      try { d = r.details ? JSON.parse(r.details) : null; } catch (e) { /* ignore */ }
+      try { d = r.details ? JSON.parse(r.details) : null; } catch (e) { /* ignore malformed legacy details */ }
       return { id: r.id, user_name: r.user_name, user_role: r.user_role, action: r.action, details: d, source: r.source, created_at: r.created_at };
     });
-    // Tickets filed before the log existed still show who filed them and when
+
+    // Comments have their own dedicated section, so keep them out of the activity feed.
+    // Older status changes may not have been logged before activity tracking existed.
+    // When the ticket is beyond its initial status and its record was updated later,
+    // show a transparent current-status snapshot rather than inventing an actor or old status.
+    const hasMove = items.some(i => i.action === 'moved');
+    const createdMs = new Date(tix[0].created_at).getTime();
+    const updatedMs = new Date(tix[0].updated_at).getTime();
+    if (!hasMove && tix[0].status && tix[0].status !== 'On Filing' &&
+        Number.isFinite(createdMs) && Number.isFinite(updatedMs) && updatedMs > createdMs) {
+      // Tickets sitting in the two "filed" lists were put there by the person who filed them,
+      // so credit that person. Any other status keeps the transparent snapshot.
+      const byFiler = tix[0].status === 'Filed Ticket List' || tix[0].status === 'Filed Ticket List for Host';
+      items.push({
+        id: 'status-snapshot-' + tix[0].id,
+        user_name: byFiler ? (tix[0].filed_by_name || 'Someone') : 'Activity history unavailable',
+        user_role: byFiler ? 'QA' : null,
+        action: byFiler ? 'moved' : 'status_snapshot',
+        details: byFiler ? { from: null, to: tix[0].status } : { status: tix[0].status },
+        source: 'app',
+        created_at: tix[0].updated_at
+      });
+    }
+    const [attachments] = await pool.execute(
+      `SELECT id, name, type, created_at FROM attachments WHERE ticket_id = ?`, [ticketId]);
+    for (const a of attachments) {
+      if (!items.some(i => i.action === 'attached' && i.details && i.details.name === a.name && i.created_at &&
+          Math.abs(new Date(i.created_at).getTime() - new Date(a.created_at).getTime()) < 5000)) {
+        // No activity row exists for this attachment (it was added before activity logging started),
+        // so credit the person who filed the ticket.
+        const filer = tix[0].filed_by_name || 'Someone';
+        items.push({ id: 'legacy-attachment-' + a.id, user_name: filer, user_role: 'QA', action: 'attached',
+          details: { name: a.name, type: a.type }, source: 'app', created_at: a.created_at });
+      }
+    }
+    // Older tickets may predate activity logging entirely.
     if (!items.some(i => i.action === 'created')) {
       items.push({ id: 'created-' + tix[0].id, user_name: tix[0].filed_by_name || 'Someone', user_role: 'QA', action: 'created', details: null, source: 'app', created_at: tix[0].created_at });
     }
-    res.json(items);
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || String(b.id).localeCompare(String(a.id)));
+    res.json(items.slice(0, 300));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error loading activity' });
@@ -133,7 +171,7 @@ router.get('/search', authRequired, async (req, res) => {
 
 router.get('/', authRequired, async (req, res) => {
   try {
-    let sql = 'SELECT tickets.*, (SELECT COUNT(*) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS comment_count, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS last_comment_at FROM tickets';
+    let sql = `SELECT tickets.*, (SELECT COUNT(*) FROM ticket_comments c WHERE c.ticket_id = tickets.id AND NOT ${REAL_COMMENT}) AS comment_count, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id AND NOT ${REAL_COMMENT}) AS last_comment_at FROM tickets`;
     const params = [];
     if (req.query.platform) {
       sql += ' WHERE platform = ?';
@@ -152,7 +190,7 @@ router.get('/', authRequired, async (req, res) => {
 
 router.get('/:id', authRequired, async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT tickets.*, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id) AS last_comment_at FROM tickets WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.execute(`SELECT tickets.*, (SELECT MAX(c.created_at) FROM ticket_comments c WHERE c.ticket_id = tickets.id AND NOT ${REAL_COMMENT}) AS last_comment_at FROM tickets WHERE id = ?`, [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Ticket not found' });
     rows[0].attachments = (await attachmentsFor([rows[0].id]))[rows[0].id];
     res.json(rows[0]);

@@ -867,7 +867,7 @@ function renderComments(list) {
     commentList.appendChild(empty); return;
   }
   list.forEach(c => {
-    const mine = c.user_id === user.id;
+    const mine = String(c.user_id) === String(user && user.id);
     const el = document.createElement('div');
     el.className = 'comment' + (mine ? ' mine' : '');
     const head = document.createElement('div');
@@ -881,11 +881,31 @@ function renderComments(list) {
     if (mine) {
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'comment-del'; del.title = 'Delete my comment'; del.textContent = '✕';
-      del.onclick = async () => {
-        if (!confirm('Delete this comment?')) return;
-        const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
-        if (!r.ok) { alert('Could not delete comment'); return; }
-        loadComments(editingId); loadTickets(true);
+      // Two-step delete without the browser's confirm() popup (which can be blocked or silently
+      // return false in some browsers / installed-app windows): 1st click arms it, 2nd click deletes.
+      let armTimer = null;
+      const disarm = () => { del.classList.remove('armed'); del.textContent = '✕'; del.title = 'Delete my comment'; armTimer = null; };
+      del.onclick = async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (!del.classList.contains('armed')) {
+          del.classList.add('armed'); del.textContent = 'Delete?'; del.title = 'Click again to delete';
+          armTimer = setTimeout(disarm, 4000);
+          return;
+        }
+        clearTimeout(armTimer);
+        del.disabled = true; del.textContent = '…';
+        try {
+          const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
+          if (!r.ok) {
+            let msg = 'Could not delete comment';
+            try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) {}
+            del.disabled = false; disarm(); alert(msg); return;
+          }
+          el.remove();
+          loadComments(editingId, true); loadTickets(true);
+        } catch (e) {
+          del.disabled = false; disarm(); alert('Could not delete comment (network problem)');
+        }
       };
       head.appendChild(del);
     }
@@ -917,7 +937,8 @@ function activityText(a) {
   const b = v => `<strong>${escapeHtml(v)}</strong>`;
   switch (a.action) {
     case 'created':            return 'filed this ticket';
-    case 'moved':              return `moved this ticket from ${b(d.from || '?')} to ${b(d.to || '?')}`;
+    case 'status_snapshot':    return `current status is <strong>${escapeHtml((d.status || 'Unknown'))}</strong>; earlier status-change details were not recorded`; 
+    case 'moved':              return d.from ? `moved this ticket from ${b(d.from)} to ${b(d.to || '?')}` : `moved this ticket to ${b(d.to || '?')}`;
     case 'assigned':           return `assigned ${b(d.name)} to this ticket`;
     case 'unassigned':         return `removed ${b(d.name)} from this ticket`;
     case 'reassigned':         return `changed the assignee from ${b(d.from)} to ${b(d.to)}`;
@@ -936,7 +957,7 @@ function activityText(a) {
 
 function renderActivity(items) {
   const list = document.getElementById('activityList');
-  const visible = items.filter(a => showActivityDetails || a.action === 'commented');
+  const visible = items.filter(a => a.action !== 'commented' && (showActivityDetails || a.action === 'created')); 
   if (!visible.length) { list.innerHTML = '<div class="act-empty">No activity yet.</div>'; return; }
   list.innerHTML = visible.map(a => `
     <div class="act-item">
