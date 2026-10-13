@@ -84,6 +84,8 @@ async function migrate() {
     CONSTRAINT fk_comment_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 
+  await require('./activity').ensureActivityTable();
+
   // Widen platform columns on older databases so the 77 Live platforms are accepted
   const PLATFORM_ENUM = "ENUM('Android','iOS','Web','77 Live Android','77 Live iOS')";
   for (const [table, nullable] of [['users', 'NULL'], ['tickets', 'NOT NULL']]) {

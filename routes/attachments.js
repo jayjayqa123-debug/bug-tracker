@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
+const { logActivity } = require('../db/activity');
 const { authRequired, qaRequired } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
@@ -93,6 +94,7 @@ router.post('/link', authRequired, qaRequired, async (req, res) => {
       [id, req.params.id, 'link', raw, name]
     );
     const [rows] = await pool.execute('SELECT * FROM attachments WHERE id = ?', [id]);
+    await logActivity(req.params.id, req.user, 'attached', { name: rows[0].name, type: rows[0].type });
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -139,6 +141,7 @@ router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, l
     );
 
     const [rows] = await pool.execute('SELECT * FROM attachments WHERE id = ?', [id]);
+    await logActivity(req.params.id, req.user, 'attached', { name: rows[0].name, type: rows[0].type });
     res.json(rows[0]);
   } catch (err) {
     console.error('Error during file upload:', err);
@@ -154,6 +157,7 @@ router.delete('/:attId', authRequired, qaRequired, async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: 'Attachment not found' });
     await pool.execute('DELETE FROM attachments WHERE id = ?', [req.params.attId]);
     removeFile(rows[0]);
+    await logActivity(req.params.id, req.user, 'removed_attachment', { name: rows[0].name });
     res.json({ message: 'Deleted' });
   } catch (err) {
     console.error(err);

@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bug Tracker Board</title>
-<script>
-  document.documentElement.setAttribute('data-theme',
-    localStorage.getItem('theme') ||
-    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-</script>
 <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="alternate icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#1d4ed8">
+  <script src="js/theme.js"></script>
 </head>
 <body>
 
@@ -30,7 +32,6 @@
   </div>
   <div class="top-actions">
     <span class="who" id="whoAmI"></span>
-      <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
     <button id="adminBtn" style="display:none;">Admin</button>
     <button id="backupBtn" style="display:none;" title="Download a backup of all filed tickets">⬇ Backup</button>
     <button id="exportBtn">Export CSV</button>
@@ -190,6 +191,13 @@
           <button type="button" class="btn-attach" id="commentSendBtn">Post comment</button>
         </div>
       </div>
+      <div class="form-group" id="activityWrap" style="display:none;">
+        <div class="activity-head">
+          <label>Comments and activity</label>
+          <button type="button" class="btn-attach" id="activityToggle">Hide details</button>
+        </div>
+        <div class="activity-list" id="activityList"></div>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-danger" id="deleteBtn" style="display:none;">Delete</button>
         <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
@@ -204,6 +212,5 @@
 <script src="js/mdlite.js"></script>
 <script src="js/richdesc.js"></script>
 <script src="js/board.js"></script>
-<script src="/js/theme.js"></script>
 </body>
 </html>

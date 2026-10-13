@@ -560,6 +560,11 @@ function applyRoleRestrictions(ticket) {
   document.getElementById('commentInput').value = '';
   stopCommentPolling();
   if (ticket) { loadComments(ticket.id); startCommentPolling(ticket.id); }
+
+  document.getElementById('activityWrap').style.display = ticket ? 'block' : 'none';
+  document.getElementById('activityList').innerHTML = '';
+  activityCache = [];
+  if (ticket) loadActivity(ticket.id);
 }
 
 function closeModal(updateUrl = true) {
@@ -850,7 +855,7 @@ let commentTimer = null;
 
 function stopCommentPolling() { if (commentTimer) { clearInterval(commentTimer); commentTimer = null; } }
 function startCommentPolling(ticketId) {
-  commentTimer = setInterval(() => { if (editingId === ticketId) loadComments(ticketId, true); }, 15000);
+  commentTimer = setInterval(() => { if (editingId === ticketId) { loadComments(ticketId, true); loadActivity(ticketId); } }, 15000);
 }
 
 function renderComments(list) {
@@ -892,6 +897,77 @@ function renderComments(list) {
   if (nearBottom) commentList.scrollTop = commentList.scrollHeight;
 }
 
+// ---------- Activity feed (who did what, newest first - like Trello) ----------
+let showActivityDetails = true;
+
+function avatarColor(name) {
+  const colors = ['#0ea5e9', '#16a34a', '#7c3aed', '#db2777', '#ea580c', '#0d9488', '#4f46e5', '#ca8a04'];
+  let h = 0;
+  for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return colors[h % colors.length];
+}
+function initials(name) {
+  const parts = String(name || '?').replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+function activityText(a) {
+  const d = a.details || {};
+  const b = v => `<strong>${escapeHtml(v)}</strong>`;
+  switch (a.action) {
+    case 'created':            return 'filed this ticket';
+    case 'moved':              return `moved this ticket from ${b(d.from || '?')} to ${b(d.to || '?')}`;
+    case 'assigned':           return `assigned ${b(d.name)} to this ticket`;
+    case 'unassigned':         return `removed ${b(d.name)} from this ticket`;
+    case 'reassigned':         return `changed the assignee from ${b(d.from)} to ${b(d.to)}`;
+    case 'attached':           return d.type === 'link' ? `added the link ${b(d.name)}` : `attached ${b(d.name)}`;
+    case 'removed_attachment': return `removed the attachment ${b(d.name)}`;
+    case 'commented':          return `commented: <span class="act-quote">“${escapeHtml(String(d.text || '').slice(0, 140))}”</span>`;
+    case 'archived':           return 'archived this ticket';
+    case 'restored':           return 'restored this ticket';
+    case 'updated':
+      if (d.field === 'title')       return `changed the title from <em>${escapeHtml(String(d.old || '').slice(0, 70))}</em> to <em>${escapeHtml(String(d.new || '').slice(0, 70))}</em>`;
+      if (d.field === 'description') return 'edited the description';
+      return `changed the ${escapeHtml(d.field || 'ticket')} from ${b(d.old)} to ${b(d.new)}`;
+    default:                   return escapeHtml(a.action);
+  }
+}
+
+function renderActivity(items) {
+  const list = document.getElementById('activityList');
+  const visible = items.filter(a => showActivityDetails || a.action === 'commented');
+  if (!visible.length) { list.innerHTML = '<div class="act-empty">No activity yet.</div>'; return; }
+  list.innerHTML = visible.map(a => `
+    <div class="act-item">
+      <div class="act-avatar" style="background:${avatarColor(a.user_name)}" title="${escapeHtml(a.user_name)}">${escapeHtml(initials(a.user_name))}</div>
+      <div class="act-body">
+        <div class="act-text"><strong>${escapeHtml(a.user_name)}</strong>${a.source === 'trello' ? ' <span class="act-src">Trello</span>' : ''} ${activityText(a)}</div>
+        <div class="act-time" title="Philippine time">${escapeHtml(PhTime.dateTime(a.created_at))}</div>
+      </div>
+    </div>`).join('');
+}
+
+let activityCache = [];
+async function loadActivity(ticketId) {
+  try {
+    const res = await fetch(`/api/tickets/${ticketId}/activity`, { headers: authHeaders });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const items = await res.json();
+    if (editingId !== ticketId) return;
+    activityCache = items;
+    renderActivity(items);
+  } catch (e) {
+    document.getElementById('activityList').innerHTML = '<div class="act-empty">Could not load activity.</div>';
+  }
+}
+document.getElementById('activityToggle').onclick = () => {
+  showActivityDetails = !showActivityDetails;
+  document.getElementById('activityToggle').textContent = showActivityDetails ? 'Hide details' : 'Show details';
+  renderActivity(activityCache);
+};
+
+
 async function loadComments(ticketId, quiet) {
   try {
     const res = await fetch(`/api/tickets/${ticketId}/comments`, { headers: authHeaders });
@@ -916,6 +992,7 @@ async function postComment() {
     if (!res.ok) { alert(data.error || 'Could not post comment'); return; }
     commentInput.value = '';
     await loadComments(editingId);
+    loadActivity(editingId);
     commentList.scrollTop = commentList.scrollHeight;
     loadTickets(true);
   } finally {

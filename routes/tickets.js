@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const { authRequired, qaRequired } = require('../middleware/auth');
 const { nextNumber, peekNumber } = require('../db/ticketNumber');
+const { logActivity, userNames } = require('../db/activity');
 const { router: attachmentsRouter, attachmentsFor, removeFile } = require('./attachments');
 const commentsRouter = require('./comments');
 
@@ -89,6 +90,30 @@ router.get('/version', authRequired, async (req, res) => {
   }
 });
 
+// Activity feed for one ticket (newest first)
+router.get('/:id/activity', authRequired, async (req, res) => {
+  try {
+    const [tix] = await pool.execute('SELECT id, filed_by_name, created_at FROM tickets WHERE id = ?', [req.params.id]);
+    if (!tix[0]) return res.status(404).json({ error: 'Ticket not found' });
+    const [rows] = await pool.execute(
+      `SELECT id, user_name, user_role, action, details, source, created_at
+       FROM ticket_activity WHERE ticket_id = ? ORDER BY created_at DESC, id DESC LIMIT 300`, [req.params.id]);
+    const items = rows.map(r => {
+      let d = null;
+      try { d = r.details ? JSON.parse(r.details) : null; } catch (e) { /* ignore */ }
+      return { id: r.id, user_name: r.user_name, user_role: r.user_role, action: r.action, details: d, source: r.source, created_at: r.created_at };
+    });
+    // Tickets filed before the log existed still show who filed them and when
+    if (!items.some(i => i.action === 'created')) {
+      items.push({ id: 'created-' + tix[0].id, user_name: tix[0].filed_by_name || 'Someone', user_role: 'QA', action: 'created', details: null, source: 'app', created_at: tix[0].created_at });
+    }
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error loading activity' });
+  }
+});
+
 // Search ticket titles (and ticket numbers) across ALL platforms
 router.get('/search', authRequired, async (req, res) => {
   try {
@@ -160,6 +185,7 @@ router.post('/', authRequired, async (req, res) => {
         req.user.id, req.user.name, shareToken
       ]
     );
+    await logActivity(id, req.user, 'created', { platform });
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [id]);
     rows[0].attachments = [];
     res.json(rows[0]);
@@ -176,6 +202,24 @@ router.put('/:id', authRequired, async (req, res) => {
     if (!existing[0]) return res.status(404).json({ error: 'Ticket not found' });
     const t = existing[0];
     const { title, description, priority, severity, assignee_id } = req.body;
+
+    // Work out what actually changed, so it can be written to the activity feed afterwards
+    const log = [];
+    const newAssignee = assignee_id !== undefined ? (assignee_id || null) : t.assignee_id;
+    if (req.user.role === 'QA') {
+      if (title !== undefined && title !== t.title) log.push(['updated', { field: 'title', old: t.title, new: title }]);
+      if (description !== undefined && description !== t.description) log.push(['updated', { field: 'description' }]);
+      if (priority !== undefined && priority !== t.priority) log.push(['updated', { field: 'priority', old: t.priority, new: priority }]);
+      if (severity !== undefined && severity !== t.severity) log.push(['updated', { field: 'severity', old: t.severity, new: severity }]);
+    }
+    if ((newAssignee || null) !== (t.assignee_id || null)) {
+      const names = await userNames([t.assignee_id, newAssignee]);
+      const from = t.assignee_id ? (names[t.assignee_id] || 'Unknown') : null;
+      const to = newAssignee ? (names[newAssignee] || 'Unknown') : null;
+      if (from && to) log.push(['reassigned', { from, to }]);
+      else if (to) log.push(['assigned', { name: to }]);
+      else if (from) log.push(['unassigned', { name: from }]);
+    }
 
     if (req.user.role === 'QA') {
       await pool.execute(
@@ -197,6 +241,8 @@ router.put('/:id', authRequired, async (req, res) => {
     } else {
       return res.status(403).json({ error: 'Permission denied' });
     }
+
+    for (const [action, details] of log) await logActivity(req.params.id, req.user, action, details);
 
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     res.json(rows[0]);
@@ -221,7 +267,7 @@ async function moveTicket(id, status) {
     sets.push('closed_at = NULL');
   }
   await pool.execute(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`, [status, id]);
-  return true;
+  return { from: t.status };
 }
 
 // Self-heal: if the database rejects a move because of an invalid "0000-00-00" date on this ticket,
@@ -250,6 +296,7 @@ router.put('/:id/status', authRequired, async (req, res) => {
       found = await moveTicket(req.params.id, status);
     }
     if (!found) return res.status(404).json({ error: 'Ticket not found' });
+    if (found.from !== status) await logActivity(req.params.id, req.user, 'moved', { from: found.from, to: status });
 
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);
     res.json(rows[0]);

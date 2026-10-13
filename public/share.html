@@ -4,20 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shared Ticket - Bug Tracker</title>
-<script>
-  document.documentElement.setAttribute('data-theme',
-    localStorage.getItem('theme') ||
-    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-</script>
 <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="alternate icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#1d4ed8">
+  <script src="js/theme.js"></script>
 </head>
 <body>
   <div class="auth-wrap" style="max-width:620px;">
     <h1>🐞 Shared Ticket</h1>
     <div id="content">Loading...</div>
   </div>
-
-  <button id="theme-toggle" class="floating" aria-label="Toggle dark mode">🌙</button>
 
   <script src="js/phtime.js"></script>
   <script src="js/mdlite.js"></script>
@@ -67,6 +67,5 @@
     }
     load();
   </script>
-  <script src="/js/theme.js"></script>
 </body>
 </html>

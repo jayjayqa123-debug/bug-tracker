@@ -1014,84 +1014,84 @@ table.users td:last-child { width: 156px; min-width: 156px; max-width: 156px; }
 }
 
 
-/* =========================================================
-   DARK MODE (added) - activated by <html data-theme="dark">
-   ========================================================= */
-[data-theme="dark"] {
-  color-scheme: dark;
+/* ---- Admin: presence column stays on one line ---- */
+.pill { white-space: nowrap; }
+table.users td.presence-cell { white-space: nowrap; min-width: 120px; }
 
-  --bg: #0f172a;
-  --panel: #1e293b;
-  --panel-card: #273449;
-  --border: #3b4a63;
+
+/* ---- Activity feed ---- */
+.activity-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.activity-head label { margin: 0; }
+.activity-list { max-height: 340px; overflow-y: auto; padding-right: 4px; }
+.act-item { display: flex; gap: 10px; padding: 8px 0; }
+.act-avatar { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.act-body { flex: 1; min-width: 0; }
+.act-text { font-size: 13px; line-height: 1.45; color: var(--text); word-wrap: break-word; }
+.act-text em { font-style: normal; background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+.act-quote { display: inline-block; margin-top: 2px; padding: 3px 8px; border-radius: 6px; background: var(--panel-card); border: 1px solid var(--border); }
+.act-src { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: var(--surface-3); color: var(--text); vertical-align: middle; }
+.act-time { font-size: 12px; color: var(--accent); margin-top: 1px; }
+.act-empty { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
+
+
+/* =====================  DARK MODE  ===================== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1522;
+  --panel: #14233a;
+  --panel-card: #1b2e49;
+  --border: #2c4565;
   --border-focus: #60a5fa;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
   --text: #e2e8f0;
   --text-muted: #94a3b8;
   --heading: #f8fafc;
-
-  --surface-2: #334155;
-  --surface-3: #475569;
-  --surface-hover: #2c3b52;
-  --surface-disabled: #2a3547;
+  --surface-2: #243b5a;
+  --surface-3: #2f4c73;
+  --surface-hover: #223653;
+  --surface-disabled: #16243a;
   --warn-text: #fbbf24;
 }
-
-/* Page backgrounds (these were hard-coded gradients) */
-[data-theme="dark"] body {
-  background: linear-gradient(135deg, #0b1220 0%, #1a1633 55%, #0d1b26 100%) fixed;
-}
+[data-theme="dark"] body,
 [data-theme="dark"] body.auth-page {
-  background: linear-gradient(135deg, #0b1220 0%, #1a1633 55%, #0d1b26 100%) fixed;
+  background: linear-gradient(135deg, #0a1320 0%, #131c33 55%, #0c1f2b 100%) fixed;
 }
-
-/* Hard-coded light colors that need a dark version */
-[data-theme="dark"] .column-body.dragover { background: #1e3a5f; }
-[data-theme="dark"] .comment.mine { background: #1e3a5f; border-color: #60a5fa; }
-[data-theme="dark"] .pill.info { background: #1e3a5f; }
+[data-theme="dark"] .column-body.dragover { background: #1f3b63; }
+[data-theme="dark"] .comment.mine { background: #1f3b63; }
+[data-theme="dark"] table.users tr.requested { background: #3b2f12; }
+[data-theme="dark"] .pill.info { background: #1f3b63; color: #dbeafe; }
 [data-theme="dark"] .pill.offline { background: #334155; color: #cbd5e1; }
-[data-theme="dark"] table.users tr.requested { background: #3d3320; }
-[data-theme="dark"] .btn-small.danger:disabled { background: var(--surface-2); }
+[data-theme="dark"] .btn-small.danger:disabled { background: #243246; color: var(--text-muted); }
 [data-theme="dark"] .card .meta.created.fixed { color: #4ade80; }
 [data-theme="dark"] .card .meta.created.closed { color: #94a3b8; }
-[data-theme="dark"] .msg.err { color: #fca5a5; }
-[data-theme="dark"] .msg.ok { color: #86efac; }
-[data-theme="dark"] .rich-editor a,
-[data-theme="dark"] .rich-view a { color: #93c5fd; }
 [data-theme="dark"] .search-results mark { background: #854d0e; color: #fef3c7; }
-[data-theme="dark"] .card { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
-
-/* Select dropdown arrow (was dark gray, now light) */
+[data-theme="dark"] .filter-count { background: #0b1522; color: #93c5fd; }
+[data-theme="dark"] .rich-editor a, [data-theme="dark"] .rich-view a { color: #7cb7ff; background: rgba(96, 165, 250, 0.16); }
+[data-theme="dark"] .rich-editor a:hover, [data-theme="dark"] .rich-view a:hover { background: rgba(96, 165, 250, 0.3); }
+[data-theme="dark"] .msg.err, [data-theme="dark"] .msg.error { color: #fca5a5; }
+[data-theme="dark"] .msg.ok, [data-theme="dark"] .msg.success { color: #86efac; }
+[data-theme="dark"] .card,
+[data-theme="dark"] header.topbar,
+[data-theme="dark"] .stat-card { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
+[data-theme="dark"] .modal,
+[data-theme="dark"] .search-results,
+[data-theme="dark"] .filter-panel { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: #6b7f99; }
+/* dropdown arrows must be light on dark backgrounds */
 [data-theme="dark"] select,
+[data-theme="dark"] .overlay select,
 [data-theme="dark"] .form-group select,
-[data-theme="dark"] .modal select,
-[data-theme="dark"] .auth-card select,
-[data-theme="dark"] .card select,
-[data-theme="dark"] .overlay select {
-  background: var(--panel-card)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
-    no-repeat calc(100% - 12px) center / 12px 12px !important;
+[data-theme="dark"] .list-controls select,
+[data-theme="dark"] .list-filters select,
+[data-theme="dark"] .admin-filters select,
+[data-theme="dark"] .admin-tools select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
 }
 
-/* Theme toggle button */
-#theme-toggle {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  transition: background 0.2s;
-}
-#theme-toggle:hover { background: var(--surface-3); }
-
-/* Use class="floating" on pages with no top bar (login, share) */
-#theme-toggle.floating {
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  z-index: 200;
+/* ---- theme toggle button ---- */
+.theme-btn { font-size: 16px; line-height: 1; padding: 7px 10px; cursor: pointer; }
+.theme-btn.floating {
+  position: fixed; left: 16px; bottom: 16px; z-index: 60; width: 42px; height: 42px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
 }
