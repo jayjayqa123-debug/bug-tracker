@@ -11,10 +11,18 @@ const { authRequired, qaRequired } = require('../middleware/auth');
 const router = express.Router({ mergeParams: true });
 
 // Ensure upload directory exists in the project root
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+// const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// if (!fs.existsSync(UPLOAD_DIR)) {
+//   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// }
+const UPLOAD_DIR = process.env.VERCEL
+  ? '/tmp/uploads'
+    : path.join(__dirname, '..', 'uploads');
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('Could not create uploads folder:', err.message);
+  }
 
 const MAX_IMAGE = 10 * 1024 * 1024;   // 10 MB
 const MAX_VIDEO = 100 * 1024 * 1024;  // 100 MB
