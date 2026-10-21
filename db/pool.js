@@ -18,13 +18,13 @@ const pool = mysql.createPool({
   },
 
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 3, //10
   dateStrings: true,
 
   // Cloud databases close idle connections; keep them alive and drop stale ones quickly
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
-  maxIdle: 4,
+  maxIdle: 1, //4
   idleTimeout: 60000,
   connectTimeout: 20000
 });
