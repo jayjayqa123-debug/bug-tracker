@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs'); // <--- 1. Import fs module
+const fs = require('fs');
 
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
@@ -11,17 +11,21 @@ const adminRoutes = require('./routes/admin');
 const { migrate } = require('./db/migrate');
 
 const app = express();
+const isVercel = !!process.env.VERCEL;
 
-// 2. Ensure root 'uploads' folder exists BEFORE mounting static route
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
+// Vercel's filesystem is read-only except /tmp (and /tmp is wiped often)
+const uploadsDir = isVercel
+  ? '/tmp/uploads'
+  : path.join(__dirname, 'uploads');
+try {
   fs.mkdirSync(uploadsDir, { recursive: true });
+} catch (err) {
+  console.warn('Could not create uploads folder:', err.message);
 }
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json());
 
-// 3. Mount static file handlers
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadsDir));
 
@@ -35,17 +39,19 @@ app.get('/', (req, res) => res.redirect('/index.html'));
 
 const PORT = process.env.PORT || 3000;
 
-migrate()
-  .then(() => {
-    console.log('Database migration completed');
-
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
+if (!isVercel) {
+  // Local / normal server: same behavior as before
+  migrate()
+    .then(() => {
+      console.log('Database migration completed');
+      app.listen(PORT, () => {
+        console.log(`Server running at http://localhost:${PORT}`);
+      });
+    })
+    .catch(err => {
+      console.error('Could not set up the database:', err.message);
+      process.exit(1);
     });
-  })
-  .catch(err => {
-    console.error('Could not set up the database:', err.message);
-    process.exit(1);
-  });
+}
 
 module.exports = app;
