@@ -15,30 +15,30 @@ const router = express.Router({ mergeParams: true });
 // if (!fs.existsSync(UPLOAD_DIR)) {
 //   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // }
-const UPLOAD_DIR = process.env.VERCEL
-  ? '/tmp/uploads'
-    : path.join(__dirname, '..', 'uploads');
-  try {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  } catch (err) {
-    console.warn('Could not create uploads folder:', err.message);
-  }
+// const UPLOAD_DIR = process.env.VERCEL
+//   ? '/tmp/uploads'
+//     : path.join(__dirname, '..', 'uploads');
+//   try {
+//     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+//   } catch (err) {
+//     console.warn('Could not create uploads folder:', err.message);
+//   }
 
-const MAX_IMAGE = 10 * 1024 * 1024;   // 10 MB
-const MAX_VIDEO = 100 * 1024 * 1024;  // 100 MB
+// const MAX_IMAGE = 10 * 1024 * 1024;   // 10 MB
+// const MAX_VIDEO = 100 * 1024 * 1024;  // 100 MB
 
-// Allowed upload types: mime -> [attachment type, file extension]
-const FILE_TYPES = {
-  'image/jpeg': ['image', '.jpg'],
-  'image/jpg': ['image', '.jpg'],
-  'image/png': ['image', '.png'],
-  'image/gif': ['image', '.gif'],
-  'image/webp': ['image', '.webp'],
-  'video/mp4': ['video', '.mp4'],
-  'video/webm': ['video', '.webm'],
-  'video/quicktime': ['video', '.mov'],
-  'video/ogg': ['video', '.ogv']
-};
+// // Allowed upload types: mime -> [attachment type, file extension]
+// const FILE_TYPES = {
+//   'image/jpeg': ['image', '.jpg'],
+//   'image/jpg': ['image', '.jpg'],
+//   'image/png': ['image', '.png'],
+//   'image/gif': ['image', '.gif'],
+//   'image/webp': ['image', '.webp'],
+//   'video/mp4': ['video', '.mp4'],
+//   'video/webm': ['video', '.webm'],
+//   'video/quicktime': ['video', '.mov'],
+//   'video/ogg': ['video', '.ogv']
+// };
 
 async function attachmentsFor(ticketIds) {
   const map = {};
@@ -64,10 +64,10 @@ async function attachmentsFor(ticketIds) {
 
 // Remove the stored file for an uploaded attachment (links have no file)
 function removeFile(att) {
-  if (att.type === 'link' || !att.url) return;
-  const filename = path.basename(att.url);
-  const file = path.join(UPLOAD_DIR, filename);
-  fs.unlink(file, () => {});
+  // if (att.type === 'link' || !att.url) return;
+  // const filename = path.basename(att.url);
+  // const file = path.join(UPLOAD_DIR, filename);
+  // fs.unlink(file, () => {});
 }
 
 async function ticketExists(id) {
@@ -111,51 +111,51 @@ router.post('/link', authRequired, qaRequired, async (req, res) => {
 });
 
 // Upload an image or video
-router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
-  try {
-    if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
+// router.post('/file', authRequired, qaRequired, express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
+//   try {
+//     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
     
-    const rawHeader = req.headers['content-type'] || '';
-    const mime = rawHeader.split(';')[0].trim().toLowerCase();
-    const kind = FILE_TYPES[mime];
+//     const rawHeader = req.headers['content-type'] || '';
+//     const mime = rawHeader.split(';')[0].trim().toLowerCase();
+//     const kind = FILE_TYPES[mime];
 
-    if (!kind) {
-      return res.status(400).json({ error: 'Unsupported file type. Use JPG, PNG, GIF, WEBP, MP4, WEBM, MOV or OGV.' });
-    }
+//     if (!kind) {
+//       return res.status(400).json({ error: 'Unsupported file type. Use JPG, PNG, GIF, WEBP, MP4, WEBM, MOV or OGV.' });
+//     }
 
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      return res.status(400).json({ error: 'Empty file received' });
-    }
+//     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+//       return res.status(400).json({ error: 'Empty file received' });
+//     }
 
-    const [type, ext] = kind;
-    if (type === 'image' && req.body.length > MAX_IMAGE) return res.status(413).json({ error: 'Image is too large (max 10 MB)' });
-    if (type === 'video' && req.body.length > MAX_VIDEO) return res.status(413).json({ error: 'Video is too large (max 100 MB)' });
+//     const [type, ext] = kind;
+//     if (type === 'image' && req.body.length > MAX_IMAGE) return res.status(413).json({ error: 'Image is too large (max 10 MB)' });
+//     if (type === 'video' && req.body.length > MAX_VIDEO) return res.status(413).json({ error: 'Video is too large (max 100 MB)' });
 
-    let name = 'attachment' + ext;
-    try { name = decodeURIComponent(req.headers['x-filename'] || name); } catch (e) {}
-    name = path.basename(name).slice(0, 255);
+//     let name = 'attachment' + ext;
+//     try { name = decodeURIComponent(req.headers['x-filename'] || name); } catch (e) {}
+//     name = path.basename(name).slice(0, 255);
 
-    const id = uuidv4();
-    const stored = uuidv4() + ext;
+//     const id = uuidv4();
+//     const stored = uuidv4() + ext;
 
-    // Write file directly to project root /uploads folder
-    await fs.promises.writeFile(path.join(UPLOAD_DIR, stored), req.body);
+//     // Write file directly to project root /uploads folder
+//     await fs.promises.writeFile(path.join(UPLOAD_DIR, stored), req.body);
 
-    const fileUrl = '/uploads/' + stored;
+//     const fileUrl = '/uploads/' + stored;
 
-    await pool.execute(
-      'INSERT INTO attachments (id, ticket_id, type, url, name) VALUES (?, ?, ?, ?, ?)',
-      [id, req.params.id, type, fileUrl, name]
-    );
+//     await pool.execute(
+//       'INSERT INTO attachments (id, ticket_id, type, url, name) VALUES (?, ?, ?, ?, ?)',
+//       [id, req.params.id, type, fileUrl, name]
+//     );
 
-    const [rows] = await pool.execute('SELECT * FROM attachments WHERE id = ?', [id]);
-    await logActivity(req.params.id, req.user, 'attached', { name: rows[0].name, type: rows[0].type });
-    res.json(rows[0]);
-  } catch (err) {
-    console.error('Error during file upload:', err);
-    res.status(500).json({ error: 'Server error uploading file' });
-  }
-});
+//     const [rows] = await pool.execute('SELECT * FROM attachments WHERE id = ?', [id]);
+//     await logActivity(req.params.id, req.user, 'attached', { name: rows[0].name, type: rows[0].type });
+//     res.json(rows[0]);
+//   } catch (err) {
+//     console.error('Error during file upload:', err);
+//     res.status(500).json({ error: 'Server error uploading file' });
+//   }
+// });
 
 router.delete('/:attId', authRequired, qaRequired, async (req, res) => {
   try {
