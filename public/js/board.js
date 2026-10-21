@@ -9,8 +9,8 @@ const ALL_STATUSES = [
   'Filed Ticket List',
   'Filed Ticket List for Host',
   'Working in Progress by Dev',
-  'Complete (For Retest)',
   'Reactive',
+  'Complete (For Retest)',
   'Backend Issue',
   'Closed'
 ];
