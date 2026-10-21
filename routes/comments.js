@@ -4,7 +4,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
-const { logActivity, activityCommentSql } = require('../db/activity');
+const { logActivity } = require('../db/activity');
 const { authRequired } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
@@ -19,7 +19,7 @@ router.get('/', authRequired, async (req, res) => {
   try {
     if (!(await ticketExists(req.params.id))) return res.status(404).json({ error: 'Ticket not found' });
     const [rows] = await pool.execute(
-      `SELECT id, user_id, user_name, user_role, body, created_at FROM ticket_comments WHERE ticket_id = ? AND NOT ${activityCommentSql('body')} ORDER BY created_at, id`,
+      'SELECT id, user_id, user_name, user_role, body, created_at FROM ticket_comments WHERE ticket_id = ? ORDER BY created_at, id',
       [req.params.id]
     );
     res.json(rows);

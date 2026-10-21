@@ -24,7 +24,7 @@
       .replace(/(^|[^*\w])\*([^\s*](?:[^*]*[^\s*])?)\*(?!\*)/g, '$1<em>$2</em>')
       .replace(/(^|[^_\w])_([^\s_](?:[^_]*[^\s_])?)_(?![_\w])/g, '$1<em>$2</em>');
 
-    s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, text, url) => keep(anchor(url, fmt(text), editor)));
+    s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)(?:\s+&quot;[^)]*?&quot;)?\)/g, (m, text, url) => keep(anchor(url, fmt(text), editor)));
     s = s.replace(/(^|[^\w"'=>\u0000])(https?:\/\/(?:(?!&quot;|&lt;|&gt;)[^\s<])+)/g, (m, pre, url) => {
       let tail = '';
       const trim = url.match(/(?:[.,;:!?)\]]|&amp;)+$/);

@@ -973,9 +973,9 @@ header.topbar { box-shadow: 0 1px 4px rgba(30, 41, 59, 0.1); }
 .rt-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .rich-linkbar { display: flex; gap: 6px; align-items: center; padding: 8px; background: var(--surface-hover); border-bottom: 1px solid var(--border); }
 .rich-linkbar input { flex: 1; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-card); color: var(--text); font-size: 13px; }
-.rich-editor { position: relative; min-height: 170px; max-height: 420px; overflow-y: auto; padding: 10px 12px; outline: none; line-height: 1.5; color: var(--text); word-wrap: break-word; }
+.rich-editor { position: relative; min-height: 170px; height: auto; max-height: none; overflow: visible; padding: 10px 12px; outline: none; line-height: 1.5; color: var(--text); word-wrap: break-word; }
 .rich-editor.is-empty::before { content: attr(data-placeholder); color: var(--text-muted); pointer-events: none; position: absolute; }
-.rich-editor.readonly { background: transparent; min-height: 40px; }
+.rich-editor.readonly { background: transparent; min-height: 0; }
 .rich-editor .rt-none { color: var(--text-muted); }
 
 .rich-editor p, .rich-view p { margin: 0 0 8px; }
@@ -1102,3 +1102,6 @@ table.users td.presence-cell { white-space: nowrap; min-width: 120px; }
 .card .meta .rx { color: #c2410c; font-weight: 600; }
 .card .meta .sep { color: var(--text-muted); font-weight: 400; }
 [data-theme="dark"] .card .meta .rx { color: #fb923c; }
+
+.rich-editor, .rich-editor * { max-width: 100%; }
+.rich-editor a, .rich-view a { word-break: break-all; }   /* long links wrap instead of stretching the box */

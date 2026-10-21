@@ -906,6 +906,7 @@ function renderComments(list) {
 }
 
 // ---------- Activity feed (who did what, newest first - like Trello) ----------
+
 let showActivityDetails = true;
 
 function avatarColor(name) {
@@ -944,7 +945,7 @@ function activityText(a) {
 
 function renderActivity(items) {
   const list = document.getElementById('activityList');
-  const visible = items.filter(a => showActivityDetails || a.action === 'commented');
+  const visible = items.filter(a => a.action !== 'commented' && (showActivityDetails || a.action === 'created')); // activity only - comments have their own section
   if (!visible.length) { list.innerHTML = '<div class="act-empty">No activity yet.</div>'; return; }
   list.innerHTML = visible.map(a => `
     <div class="act-item">
@@ -969,12 +970,13 @@ async function loadActivity(ticketId) {
     document.getElementById('activityList').innerHTML = '<div class="act-empty">Could not load activity.</div>';
   }
 }
+
+
 document.getElementById('activityToggle').onclick = () => {
   showActivityDetails = !showActivityDetails;
   document.getElementById('activityToggle').textContent = showActivityDetails ? 'Hide details' : 'Show details';
   renderActivity(activityCache);
 };
-
 
 async function loadComments(ticketId, quiet) {
   try {
