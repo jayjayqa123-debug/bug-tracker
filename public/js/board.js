@@ -418,6 +418,17 @@ function fullDate(v) {
   return d ? PhTime.dateTime(d) : '';
 }
 
+// "✔ Fixed <date>" - and for Reactive tickets "✔ Fixed <date> - ↺ Reactive <date>"
+function fixedLine(t) {
+  const fixed = parseDbDate(t.fixed_at) ? t.fixed_at : null;
+  const reactive = t.status === 'Reactive' ? (t.reactive_at || t.updated_at) : null;
+  if (!fixed && !reactive) return '';
+  const parts = [];
+  if (fixed) parts.push(`<span class="fx" title="${escapeHtml(fullDate(fixed))}">✔ Fixed ${escapeHtml(shortDate(fixed))}</span>`);
+  if (reactive) parts.push(`<span class="rx" title="${escapeHtml(fullDate(reactive))}">↺ Reactive ${escapeHtml(shortDate(reactive))}</span>`);
+  return `<div class="meta created fixed">${parts.join('<span class="sep"> - </span>')}</div>`;
+}
+
 function renderCard(t) {
   const upd = lastActivity(t);
   const card = document.createElement('div');
@@ -439,7 +450,7 @@ function renderCard(t) {
     <div class="meta"><span>Filed by ${escapeHtml(t.filed_by_name || '')}</span></div>
     <div class="meta created" title="${escapeHtml(fullDate(t.created_at))}"><span>🗓 Created ${escapeHtml(shortDate(t.created_at))}</span></div>
     <div class="meta created" title="${escapeHtml(fullDate(upd))}"><span>↻ Updated ${escapeHtml(shortDate(upd))}</span></div>
-    ${t.fixed_at ? `<div class="meta created fixed" title="${escapeHtml(fullDate(t.fixed_at))}"><span>✔ Fixed ${escapeHtml(shortDate(t.fixed_at))}</span></div>` : ''}
+    ${fixedLine(t)}
     ${(t.status === 'Closed' && t.closed_at) ? `<div class="meta created closed" title="${escapeHtml(fullDate(t.closed_at))}"><span>🔒 Closed ${escapeHtml(shortDate(t.closed_at))}</span></div>` : ''}
   `;
 
@@ -520,6 +531,7 @@ function openModal(ticket, updateUrl = true) {
   const datesWrap = document.getElementById('datesWrap');
   if (ticket) {
     const rows = [['Created', ticket.created_at], ['Last updated', lastActivity(ticket)], ['Fixed', ticket.fixed_at],
+      ['Reactive', ticket.status === 'Reactive' ? (ticket.reactive_at || ticket.updated_at) : null],
       ['Closed', ticket.status === 'Closed' ? ticket.closed_at : null]].filter(r => r[1]);
     document.getElementById('datesGrid').innerHTML = rows.map(r =>
       `<div><span>${r[0]}</span><strong>${escapeHtml(fullDate(r[1]))}</strong></div>`).join('');
@@ -819,10 +831,6 @@ async function addFiles(type, fileList) {
   }
 }
 
-document.getElementById('addImageBtn').onclick = () => document.getElementById('imageInput').click();
-document.getElementById('addVideoBtn').onclick = () => document.getElementById('videoInput').click();
-document.getElementById('imageInput').onchange = e => { addFiles('image', e.target.files); e.target.value = ''; };
-document.getElementById('videoInput').onchange = e => { addFiles('video', e.target.files); e.target.value = ''; };
 
 const linkRow = document.getElementById('linkRow');
 const linkInput = document.getElementById('linkInput');
@@ -867,7 +875,7 @@ function renderComments(list) {
     commentList.appendChild(empty); return;
   }
   list.forEach(c => {
-    const mine = String(c.user_id) === String(user && user.id);
+    const mine = c.user_id === user.id;
     const el = document.createElement('div');
     el.className = 'comment' + (mine ? ' mine' : '');
     const head = document.createElement('div');
@@ -881,31 +889,11 @@ function renderComments(list) {
     if (mine) {
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'comment-del'; del.title = 'Delete my comment'; del.textContent = '✕';
-      // Two-step delete without the browser's confirm() popup (which can be blocked or silently
-      // return false in some browsers / installed-app windows): 1st click arms it, 2nd click deletes.
-      let armTimer = null;
-      const disarm = () => { del.classList.remove('armed'); del.textContent = '✕'; del.title = 'Delete my comment'; armTimer = null; };
-      del.onclick = async (ev) => {
-        ev.preventDefault(); ev.stopPropagation();
-        if (!del.classList.contains('armed')) {
-          del.classList.add('armed'); del.textContent = 'Delete?'; del.title = 'Click again to delete';
-          armTimer = setTimeout(disarm, 4000);
-          return;
-        }
-        clearTimeout(armTimer);
-        del.disabled = true; del.textContent = '…';
-        try {
-          const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
-          if (!r.ok) {
-            let msg = 'Could not delete comment';
-            try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) {}
-            del.disabled = false; disarm(); alert(msg); return;
-          }
-          el.remove();
-          loadComments(editingId, true); loadTickets(true);
-        } catch (e) {
-          del.disabled = false; disarm(); alert('Could not delete comment (network problem)');
-        }
+      del.onclick = async () => {
+        if (!confirm('Delete this comment?')) return;
+        const r = await fetch(`/api/tickets/${editingId}/comments/${c.id}`, { method: 'DELETE', headers: authHeaders });
+        if (!r.ok) { alert('Could not delete comment'); return; }
+        loadComments(editingId); loadTickets(true);
       };
       head.appendChild(del);
     }
@@ -937,8 +925,7 @@ function activityText(a) {
   const b = v => `<strong>${escapeHtml(v)}</strong>`;
   switch (a.action) {
     case 'created':            return 'filed this ticket';
-    case 'status_snapshot':    return `current status is <strong>${escapeHtml((d.status || 'Unknown'))}</strong>; earlier status-change details were not recorded`; 
-    case 'moved':              return d.from ? `moved this ticket from ${b(d.from)} to ${b(d.to || '?')}` : `moved this ticket to ${b(d.to || '?')}`;
+    case 'moved':              return `moved this ticket from ${b(d.from || '?')} to ${b(d.to || '?')}`;
     case 'assigned':           return `assigned ${b(d.name)} to this ticket`;
     case 'unassigned':         return `removed ${b(d.name)} from this ticket`;
     case 'reassigned':         return `changed the assignee from ${b(d.from)} to ${b(d.to)}`;
@@ -957,7 +944,7 @@ function activityText(a) {
 
 function renderActivity(items) {
   const list = document.getElementById('activityList');
-  const visible = items.filter(a => a.action !== 'commented' && (showActivityDetails || a.action === 'created')); 
+  const visible = items.filter(a => showActivityDetails || a.action === 'commented');
   if (!visible.length) { list.innerHTML = '<div class="act-empty">No activity yet.</div>'; return; }
   list.innerHTML = visible.map(a => `
     <div class="act-item">

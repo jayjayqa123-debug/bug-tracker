@@ -1095,3 +1095,10 @@ table.users td.presence-cell { white-space: nowrap; min-width: 120px; }
   border-radius: 50%; border: 1px solid var(--border); background: var(--panel); color: var(--text);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
 }
+
+
+/* ---- "Fixed <date> - Reactive <date>" on cards ---- */
+.card .meta.created.fixed { flex-wrap: wrap; gap: 0 4px; justify-content: flex-start; }
+.card .meta .rx { color: #c2410c; font-weight: 600; }
+.card .meta .sep { color: var(--text-muted); font-weight: 400; }
+[data-theme="dark"] .card .meta .rx { color: #fb923c; }

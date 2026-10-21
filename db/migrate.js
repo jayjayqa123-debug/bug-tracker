@@ -85,7 +85,33 @@ async function migrate() {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`);
 
   await require('./activity').ensureActivityTable();
-  await require('./activity').purgeActivityComments();
+
+  // Date a ticket became Reactive (shown as "Fixed <date> - Reactive <date>")
+  if (!(await columnInfo('tickets', 'reactive_at'))) {
+    await pool.query('ALTER TABLE tickets ADD COLUMN reactive_at DATETIME NULL');
+  }
+
+  // Older comments already know who wrote them - show them in each ticket's activity feed too
+  try {
+    await pool.query(`
+      INSERT IGNORE INTO ticket_activity (id, ticket_id, user_id, user_name, user_role, action, details, source, external_id, created_at)
+      SELECT UUID(), c.ticket_id, c.user_id, c.user_name, c.user_role, 'commented',
+             JSON_OBJECT('text', LEFT(c.body, 200)), 'app', CONCAT('c:', c.id), c.created_at
+      FROM ticket_comments c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM ticket_activity a
+        WHERE a.ticket_id = c.ticket_id AND a.action = 'commented' AND a.user_name = c.user_name
+          AND ABS(TIMESTAMPDIFF(SECOND, a.created_at, c.created_at)) <= 5)`);
+  } catch (e) { console.log('Could not copy older comments into the activity feed (not critical):', e.message); }
+
+  // Tickets already in Reactive: use the date they were moved there, when it was recorded
+  try {
+    await pool.query(`
+      UPDATE tickets SET reactive_at = (
+        SELECT MAX(a.created_at) FROM ticket_activity a
+        WHERE a.ticket_id = tickets.id AND a.action = 'moved' AND a.details LIKE '%"to":"Reactive"%')
+      WHERE status = 'Reactive' AND reactive_at IS NULL`);
+  } catch (e) { console.log('Could not fill Reactive dates (not critical):', e.message); }
 
   // Widen platform columns on older databases so the 77 Live platforms are accepted
   const PLATFORM_ENUM = "ENUM('Android','iOS','Web','77 Live Android','77 Live iOS')";
