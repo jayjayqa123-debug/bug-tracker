@@ -9,16 +9,31 @@ const commentsRouter = require('./comments');
 
 const router = express.Router();
 
-const STATUSES = [
-  'On Filing',
-  'Filed Ticket List',
-  'Filed Ticket List for Host',
-  'Working in Progress by Dev',
-  'Complete (For Retest)',
-  'Reactive',
-  'Backend Issue',
-  'Closed'
-];
+// Board columns for each platform (Web has no "for Host" column; 77 Live has a single "Filed Ticket List")
+const STATUSES_BY_PLATFORM = {
+  'Android': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List for Host', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  'iOS': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List for Host', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  'Web': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  '77 Live Android': [
+    'On Filing', 'Filed Ticket List',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  '77 Live iOS': [
+    'On Filing', 'Filed Ticket List',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ]
+};
+const STATUSES = [...new Set(Object.values(STATUSES_BY_PLATFORM).flat())];   // every valid status
+const statusesFor = platform => STATUSES_BY_PLATFORM[platform] || STATUSES;
 
 // Allowed platforms for validation - Updated for both 77 Live Android and 77 Live iOS
 const ALLOWED_PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live iOS'];
@@ -26,7 +41,7 @@ const ALLOWED_PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live 
 router.use('/:id/attachments', attachmentsRouter);
 router.use('/:id/comments', commentsRouter);
 
-router.get('/statuses', (req, res) => res.json(STATUSES));
+router.get('/statuses', (req, res) => res.json(req.query.platform ? statusesFor(req.query.platform) : STATUSES));
 
 router.get('/devs', authRequired, async (req, res) => {
   try {
@@ -258,6 +273,7 @@ async function moveTicket(id, status) {
   const [existing] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [id]);
   const t = existing[0];
   if (!t) return null;
+  if (!statusesFor(t.platform).includes(status)) return { invalid: true, platform: t.platform };
   const blank = v => !v || /^0000-00-00/.test(String(v));
   const sets = ['status = ?'];
   if (status === 'Complete (For Retest)' && blank(t.fixed_at)) sets.push('fixed_at = NOW()');
@@ -297,6 +313,7 @@ router.put('/:id/status', authRequired, async (req, res) => {
       found = await moveTicket(req.params.id, status);
     }
     if (!found) return res.status(404).json({ error: 'Ticket not found' });
+    if (found.invalid) return res.status(400).json({ error: `"${status}" is not a column on the ${found.platform} board` });
     if (found.from !== status) await logActivity(req.params.id, req.user, 'moved', { from: found.from, to: status });
 
     const [rows] = await pool.execute('SELECT * FROM tickets WHERE id = ?', [req.params.id]);

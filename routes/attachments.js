@@ -64,10 +64,7 @@ async function attachmentsFor(ticketIds) {
 
 // Remove the stored file for an uploaded attachment (links have no file)
 function removeFile(att) {
-  // if (att.type === 'link' || !att.url) return;
-  // const filename = path.basename(att.url);
-  // const file = path.join(UPLOAD_DIR, filename);
-  // fs.unlink(file, () => {});
+  // node
 }
 
 async function ticketExists(id) {

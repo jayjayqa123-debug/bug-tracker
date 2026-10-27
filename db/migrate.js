@@ -113,6 +113,20 @@ async function migrate() {
       WHERE status = 'Reactive' AND reactive_at IS NULL`);
   } catch (e) { console.log('Could not fill Reactive dates (not critical):', e.message); }
 
+  // Board columns per platform:
+  //  - Android / iOS / Web: the single "Filed Ticket List" was split into Game 99 Vertical / Horizontal.
+  //    Existing tickets go to Vertical (drag any of them to Horizontal).
+  //  - 77 Live Android / iOS keep one plain "Filed Ticket List" (no Horizontal / Vertical / Host columns).
+  // "Last updated" is kept as it was.
+  try {
+    const [a] = await pool.query(
+      "UPDATE tickets SET status = 'Filed Ticket List (Game 99 Vertical)', updated_at = updated_at WHERE status = 'Filed Ticket List' AND platform IN ('Android', 'iOS', 'Web')");
+    if (a.affectedRows) console.log(`Moved ${a.affectedRows} ticket(s) from "Filed Ticket List" to "Filed Ticket List (Game 99 Vertical)".`);
+    const [b] = await pool.query(
+      "UPDATE tickets SET status = 'Filed Ticket List', updated_at = updated_at WHERE platform IN ('77 Live Android', '77 Live iOS') AND status IN ('Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List (Game 99 Horizontal)', 'Filed Ticket List for Host')");
+    if (b.affectedRows) console.log(`Put ${b.affectedRows} 77 Live ticket(s) back in "Filed Ticket List".`);
+  } catch (e) { console.log('Could not update the Filed Ticket List statuses (not critical):', e.message); }
+
   // Widen platform columns on older databases so the 77 Live platforms are accepted
   const PLATFORM_ENUM = "ENUM('Android','iOS','Web','77 Live Android','77 Live iOS')";
   for (const [table, nullable] of [['users', 'NULL'], ['tickets', 'NOT NULL']]) {

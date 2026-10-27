@@ -87,6 +87,7 @@ document.querySelectorAll('#platformTabs button').forEach(b => {
     document.querySelectorAll('#platformTabs button').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     currentPlatform = b.dataset.platform;
+    loadStatusFilter();
     localStorage.setItem('listPlatform', currentPlatform);
     loadData();
   };
@@ -164,13 +165,17 @@ document.getElementById('headRow').addEventListener('click', e => {
 ['searchInput', 'statusFilter', 'priorityFilter', 'severityFilter', 'assigneeFilter'].forEach(id =>
   document.getElementById(id).addEventListener('input', renderTable));
 
-fetch('/api/tickets/statuses', { headers: authHeaders })
-  .then(r => r.json())
-  .then(list => {
-    document.getElementById('statusFilter').innerHTML =
-      '<option value="">All Statuses</option>' + list.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-  });
+async function loadStatusFilter() {
+  const sel = document.getElementById('statusFilter'), cur = sel.value;
+  try {
+    const list = await (await fetch(`/api/tickets/statuses?platform=${encodeURIComponent(currentPlatform)}`, { headers: authHeaders })).json();
+    sel.innerHTML = '<option value="">All Statuses</option>' + list.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    sel.value = list.includes(cur) ? cur : '';
+  } catch (e) { /* keep the current options */ }
+}
 
+
+loadStatusFilter();
 loadData();
 </script>
 </body>

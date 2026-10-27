@@ -4,16 +4,29 @@ if (!token || !user) window.location.href = 'index.html';
 
 const authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 
-const ALL_STATUSES = [
-  'On Filing',
-  'Filed Ticket List',
-  'Filed Ticket List for Host',
-  'Working in Progress by Dev',
-  'Reactive',
-  'Complete (For Retest)',
-  'Backend Issue',
-  'Closed'
-];
+// Columns for each platform (Web has no "for Host"; 77 Live has a single "Filed Ticket List")
+const STATUSES_BY_PLATFORM = {
+  'Android': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List for Host', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  'iOS': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List for Host', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  'Web': [
+    'On Filing', 'Filed Ticket List (Game 99 Vertical)', 'Filed Ticket List (Game 99 Horizontal)',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  '77 Live Android': [
+    'On Filing', 'Filed Ticket List',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ],
+  '77 Live iOS': [
+    'On Filing', 'Filed Ticket List',
+    'Working in Progress by Dev', 'Reactive', 'Complete (For Retest)', 'Backend Issue', 'Closed'
+  ]
+};
 
 let currentPlatform = 'Android';
 const ALL_PLATFORMS = ['Android', 'iOS', 'Web', '77 Live Android', '77 Live iOS'];
@@ -264,8 +277,7 @@ async function goToTicket(id, platform) {
 }
 
 function visibleStatuses() {
-  if (currentPlatform === 'Web') return ALL_STATUSES.filter(s => s !== 'Filed Ticket List for Host');
-  return ALL_STATUSES;
+  return STATUSES_BY_PLATFORM[currentPlatform] || STATUSES_BY_PLATFORM['Android'];
 }
 
 async function loadDevs() {
