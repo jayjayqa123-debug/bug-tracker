@@ -875,7 +875,12 @@ let commentTimer = null;
 
 function stopCommentPolling() { if (commentTimer) { clearInterval(commentTimer); commentTimer = null; } }
 function startCommentPolling(ticketId) {
-  commentTimer = setInterval(() => { if (editingId === ticketId) { loadComments(ticketId, true); loadActivity(ticketId); } }, 15000);
+  // Refresh an open ticket less frequently to reduce serverless function usage.
+  commentTimer = setInterval(() => {
+    if (document.hidden || editingId !== ticketId) return;
+    loadComments(ticketId, true);
+    loadActivity(ticketId);
+  }, 60000);
 }
 
 function renderComments(list) {
@@ -1049,32 +1054,39 @@ document.addEventListener('mouseleave', () => {
   isUserInteracting = false;
 });
 
-// ---------- Auto Refresh Feature (Silent refresh every 5 seconds) ----------
+// ---------- Auto Refresh Feature (lightweight version check every 30 seconds) ----------
 const lastVersion = {};      // platform -> last "version" string seen
 let lastFullRefresh = Date.now();
+let autoRefreshInFlight = false;
 
 function startAutoRefresh() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
   autoRefreshTimer = setInterval(async () => {
-    if (document.hidden) return;                                   // nobody is looking
+    if (document.hidden) return;
     if (overlay.classList.contains('open') || isUserInteracting) return;
+    if (autoRefreshInFlight) return;
+
+    autoRefreshInFlight = true;
     const platform = currentPlatform;
     try {
-      // Tiny request first; only download everything if something actually changed
+      // Only refresh the full board when the server reports a change.
       const res = await fetch(`/api/tickets/version?platform=${encodeURIComponent(platform)}`, { headers: authHeaders });
-      if (!res.ok) {                                              // older server without /version: plain refresh
+      if (!res.ok) {
+        // Compatibility fallback for deployments without the version endpoint.
         await Promise.all([loadTickets(true), loadStats()]);
+        lastFullRefresh = Date.now();
         return;
       }
       const { v } = await res.json();
-      const stale = Date.now() - lastFullRefresh > 60000;          // safety refresh once a minute
+      const stale = Date.now() - lastFullRefresh > 300000; // safety refresh every 5 minutes
       if (v !== lastVersion[platform] || stale) {
         lastVersion[platform] = v;
         lastFullRefresh = Date.now();
         await Promise.all([loadTickets(true), loadStats()]);
       }
-    } catch (e) { /* try again next tick */ }
-  }, 5000);
+    } catch (e) { /* retry on the next interval */ }
+    finally { autoRefreshInFlight = false; }
+  }, 30000);
 }
 
 async function loadAll() {
