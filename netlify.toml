@@ -5,6 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  SECRETS_SCAN_OMIT_KEYS = "DB_NAME,DB_PORT"
 
 [functions]
   node_bundler = "esbuild"
