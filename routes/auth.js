@@ -42,8 +42,15 @@ router.get('/config', (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, role, platform } = req.body;
-    if (!name || !email || !password || !role) {
+    // Keep name validation friendly: accept single names, spaces, accents,
+    // hyphens, apostrophes and other normal name formats. Only reject blank
+    // names and values longer than the database column can store.
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanName || !email || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password and role are all required' });
+    }
+    if (cleanName.length > 255) {
+      return res.status(400).json({ error: 'Name must be 255 characters or fewer' });
     }
     const profile = checkProfile(role, platform);
     if (profile.error) return res.status(400).json({ error: profile.error });
@@ -55,7 +62,7 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     await pool.execute(
       'INSERT INTO users (id, name, email, password, role, platform) VALUES (?, ?, ?, ?, ?, ?)',
-      [uuidv4(), name, email, hash, profile.role, profile.platform]
+      [uuidv4(), cleanName, email, hash, profile.role, profile.platform]
     );
     res.json({ message: 'Registered successfully. You can now log in.' });
   } catch (err) {

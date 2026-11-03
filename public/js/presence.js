@@ -1,4 +1,4 @@
-// Tells the server this person is online (every 60s while the page is open).
+// Tells the server this person is online (every 90s while the page is open).
 (function () {
   const token = localStorage.getItem('token');
   if (!token) return;
@@ -10,7 +10,7 @@
       .then(r => { if (r.status === 401) clearInterval(timer); })
       .catch(() => {});
   }
-  timer = setInterval(ping, 60000);
+  timer = setInterval(ping, 90000);
   ping();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
 

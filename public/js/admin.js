@@ -148,7 +148,7 @@ document.getElementById('search').addEventListener('input', render);
 document.getElementById('roleFilter').addEventListener('change', render);
 
 load();
-setInterval(() => { if (!document.hidden) load(); }, 60000); // reduce background requests
+setInterval(() => { if (!document.hidden) load(); }, 90000); // reduce background requests
 
 
 // ---- Combined ticket totals (Android + iOS + Web) ----
@@ -172,4 +172,4 @@ async function loadTotals() {
   }
 }
 loadTotals();
-setInterval(() => { if (!document.hidden) loadTotals(); }, 60000);
+setInterval(() => { if (!document.hidden) loadTotals(); }, 90000);

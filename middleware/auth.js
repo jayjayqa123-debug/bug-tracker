@@ -1,5 +1,8 @@
 const jwt = require('jsonwebtoken');
-const SECRET = process.env.JWT_SECRET || 'change_this_secret';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET || SECRET.length < 32 || SECRET === 'change_this_secret') {
+  throw new Error('JWT_SECRET must be configured with at least 32 random characters');
+}
 
 // ---- Online/offline presence ----
 // Any authenticated request counts as "seen". Writes are limited to one per user per 30 seconds.

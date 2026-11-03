@@ -880,7 +880,7 @@ function startCommentPolling(ticketId) {
     if (document.hidden || editingId !== ticketId) return;
     loadComments(ticketId, true);
     loadActivity(ticketId);
-  }, 60000);
+  }, 90000);
 }
 
 function renderComments(list) {
@@ -1054,7 +1054,7 @@ document.addEventListener('mouseleave', () => {
   isUserInteracting = false;
 });
 
-// ---------- Auto Refresh Feature (lightweight version check every 30 seconds) ----------
+// ---------- Auto Refresh Feature (lightweight version check every 90 seconds) ----------
 const lastVersion = {};      // platform -> last "version" string seen
 let lastFullRefresh = Date.now();
 let autoRefreshInFlight = false;
@@ -1078,7 +1078,7 @@ function startAutoRefresh() {
         return;
       }
       const { v } = await res.json();
-      const stale = Date.now() - lastFullRefresh > 300000; // safety refresh every 5 minutes
+      const stale = Date.now() - lastFullRefresh > 900000; // safety refresh every 15 minutes
       if (v !== lastVersion[platform] || stale) {
         lastVersion[platform] = v;
         lastFullRefresh = Date.now();
@@ -1086,7 +1086,7 @@ function startAutoRefresh() {
       }
     } catch (e) { /* retry on the next interval */ }
     finally { autoRefreshInFlight = false; }
-  }, 30000);
+  }, 90000);
 }
 
 async function loadAll() {

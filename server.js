@@ -23,7 +23,8 @@ try {
   console.warn('Could not create uploads folder:', err.message);
 }
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(v => v.trim()).filter(Boolean);
+app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : false }));
 app.use(express.json());
 
 app.use(express.static(path.join(__dirname, 'public')));

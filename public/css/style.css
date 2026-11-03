@@ -1105,3 +1105,29 @@ table.users td.presence-cell { white-space: nowrap; min-width: 120px; }
 
 .rich-editor, .rich-editor * { max-width: 100%; }
 .rich-editor a, .rich-view a { word-break: break-all; }   /* long links wrap instead of stretching the box */
+
+
+/* Fix repeated dropdown chevrons in the ticket form (including Dev View). */
+#tPriority,
+#tSeverity,
+#tAssignee,
+#tStatus,
+#rtBlock {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--panel-card, #fff) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px 12px !important;
+  padding-right: 36px !important;
+}
+
+[data-theme="dark"] #tPriority,
+[data-theme="dark"] #tSeverity,
+[data-theme="dark"] #tAssignee,
+[data-theme="dark"] #tStatus,
+[data-theme="dark"] #rtBlock {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
+}

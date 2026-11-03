@@ -16,6 +16,12 @@ async function columnInfo(table, column) {
 }
 
 async function migrate() {
+  // A single-row mutex serializes account creation to enforce the 32-user cap.
+  await pool.query(`CREATE TABLE IF NOT EXISTS account_limit_lock (
+    id TINYINT NOT NULL PRIMARY KEY
+  ) ENGINE=InnoDB`);
+  await pool.query('INSERT IGNORE INTO account_limit_lock (id) VALUES (1)');
+
   // 1) Create any missing tables from schema.sql
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
     .split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
