@@ -11,7 +11,7 @@ const adminRoutes = require('./routes/admin');
 const { migrate } = require('./db/migrate');
 
 const app = express();
-const isVercel = !!process.env.VERCEL;
+const isVercel = !!(process.env.VERCEL || process.env.NETLIFY_RUNTIME); // serverless: Vercel or Netlify
 
 // Vercel's filesystem is read-only except /tmp (and /tmp is wiped often)
 const uploadsDir = isVercel

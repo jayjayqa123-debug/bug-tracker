@@ -1,0 +1,24 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+  command = "echo 'no build step'"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["mysql2"]
+
+# API goes to the Express app (same routes as Vercel's /api rewrite)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# Same as Express's  app.get('/') -> /index.html
+[[redirects]]
+  from = "/"
+  to = "/index.html"
+  status = 200
